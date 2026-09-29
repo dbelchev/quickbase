@@ -27,6 +27,7 @@ For `/code-review` Standards: pass **this file** (skill list + this protocol) to
 | Next.js Cache Components (`use cache`, PPR, tags) | `next-cache-components` |
 | Upgrading Next.js | `next-upgrade` |
 | Turborepo / monorepo pipelines and packages | `turborepo` |
+| Creating a domain package (`model`, `service`, `repository`, `createServices`) | `create-package` |
 
 ## Overrides
 

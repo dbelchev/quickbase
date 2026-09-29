@@ -1,0 +1,3 @@
+interface:
+  display_name: "Create package"
+  short_description: "Scaffold a domain package with Zod and Vitest"
