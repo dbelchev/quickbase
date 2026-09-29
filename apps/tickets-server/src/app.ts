@@ -44,29 +44,18 @@ const decisionStatus = {
   already_decided: 409,
 } as const;
 
+const tenantIdSchema = z.enum(["tenant-a", "tenant-b"]);
+
 const tenantHeaders = z.object({
-  "x-tenant-id": z.enum(["tenant-a", "tenant-b"]),
+  "x-tenant-id": tenantIdSchema,
 });
 
-const chatErrorSchema = z.object({
-  error: z.enum([
-    "Unknown or missing tenant.",
-    "Invalid JSON.",
-    "Missing thread.",
-  ]),
+const errorBodySchema = z.object({
+  error: z.string(),
 });
 
 const mismatchSchema = z.object({
   error: z.literal("Tenant does not match the thread."),
-});
-
-const decisionErrorSchema = z.object({
-  error: z.enum([
-    "Unknown or missing tenant.",
-    "Invalid JSON.",
-    "Missing proposal.",
-    "Invalid decision.",
-  ]),
 });
 
 const appliedOrRejectedSchema = z.object({
@@ -127,9 +116,7 @@ export async function buildApp(
   app.addHook("onRequest", async (request, reply) => {
     if (!request.url.startsWith("/api/")) return;
 
-    const header = request.headers["x-tenant-id"];
-    const tenantId = Array.isArray(header) ? undefined : header;
-    if (tenantId !== "tenant-a" && tenantId !== "tenant-b") {
+    if (!readTenantId(request.headers["x-tenant-id"])) {
       return reply.status(400).send({ error: "Unknown or missing tenant." });
     }
   });
@@ -141,13 +128,16 @@ export async function buildApp(
         headers: tenantHeaders,
         body: chatBodySchema,
         response: {
-          400: chatErrorSchema,
+          400: errorBodySchema,
           409: mismatchSchema,
         },
       },
     },
     async (request, reply) => {
-      const tenantId = request.headers["x-tenant-id"] as TenantId;
+      const tenantId = readTenantId(request.headers["x-tenant-id"]);
+      if (!tenantId) {
+        return reply.status(400).send({ error: "Unknown or missing tenant." });
+      }
       const result = await ticketsChatAgent.reply({
         tenantId,
         threadId: request.body.threadId,
@@ -173,14 +163,17 @@ export async function buildApp(
         body: decisionBodySchema,
         response: {
           200: appliedOrRejectedSchema,
-          400: decisionErrorSchema,
+          400: errorBodySchema,
           404: notFoundSchema,
           409: alreadyDecidedSchema,
         },
       },
     },
     async (request, reply) => {
-      const tenantId = request.headers["x-tenant-id"] as TenantId;
+      const tenantId = readTenantId(request.headers["x-tenant-id"]);
+      if (!tenantId) {
+        return reply.status(400).send({ error: "Unknown or missing tenant." });
+      }
       const result = ticketsChatAgent.decide({
         tenantId,
         proposalId: request.body.proposalId,
@@ -241,6 +234,15 @@ export async function openApiDocument(): Promise<OpenApiDocument> {
   }
   await app.close();
   return document;
+}
+
+function readTenantId(
+  header: string | string[] | undefined,
+): TenantId | undefined {
+  const parsed = tenantIdSchema.safeParse(
+    Array.isArray(header) ? undefined : header,
+  );
+  return parsed.success ? parsed.data : undefined;
 }
 
 function sendAgentResponse(reply: FastifyReply, response: Response) {

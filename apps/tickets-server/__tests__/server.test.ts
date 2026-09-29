@@ -191,6 +191,15 @@ describe("tickets server", () => {
     expect(response.json()).toEqual({ error: "Invalid JSON." });
   });
 
+  it("rejects a chat body with no messages", async () => {
+    const app = await buildApp(standIn());
+
+    const response = await post(app, "/api/chat", { threadId: "thread-1" });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: "Invalid request." });
+  });
+
   it("rejects a chat body with no thread", async () => {
     const app = await buildApp(standIn());
 

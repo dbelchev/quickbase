@@ -75,12 +75,7 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string",
-                      "enum": [
-                        "Unknown or missing tenant.",
-                        "Invalid JSON.",
-                        "Missing thread."
-                      ]
+                      "type": "string"
                     }
                   },
                   "required": [
@@ -191,13 +186,7 @@
                   "type": "object",
                   "properties": {
                     "error": {
-                      "type": "string",
-                      "enum": [
-                        "Unknown or missing tenant.",
-                        "Invalid JSON.",
-                        "Missing proposal.",
-                        "Invalid decision."
-                      ]
+                      "type": "string"
                     }
                   },
                   "required": [
