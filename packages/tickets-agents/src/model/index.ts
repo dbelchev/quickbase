@@ -1,5 +1,7 @@
 export {
   decisionSchema,
+  mutateTicketInputSchema,
+  searchTicketsInputSchema,
   tenantIdSchema,
   ticketSchema,
   ticketStatusSchema,

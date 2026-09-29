@@ -1,8 +1,11 @@
 import { GeminiService } from "@quickbase/inference-provider";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resetStore, TicketsChatAgentService } from "../src";
-import { createRepository } from "../src/repository";
+import {
+  createRepository,
+  resetStore,
+  TicketsChatAgentService,
+} from "../src";
 
 const tenantBText = [
   "Acme layoff plan",

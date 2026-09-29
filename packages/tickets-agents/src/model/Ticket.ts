@@ -28,3 +28,13 @@ export type UpdateFields = z.infer<typeof updateFieldsSchema>;
 export const decisionSchema = z.enum(["approve", "reject"]);
 
 export type Decision = z.infer<typeof decisionSchema>;
+
+export const searchTicketsInputSchema = z.object({
+  query: z.string().describe("Text to match against title and description"),
+});
+
+export const mutateTicketInputSchema = z.object({
+  id: z.string(),
+  action: z.enum(["update", "delete"]),
+  fields: z.record(z.string(), z.unknown()).optional(),
+});

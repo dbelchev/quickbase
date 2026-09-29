@@ -6,9 +6,10 @@ import {
   type ModelMessage,
   type ToolSet,
 } from "ai";
-import { z } from "zod";
 import {
   decisionSchema,
+  mutateTicketInputSchema,
+  searchTicketsInputSchema,
   tenantIdSchema,
   updateFieldsSchema,
   type Decision,
@@ -20,16 +21,6 @@ import type { TicketRepository } from "../repository";
 import { agentState, type Proposal } from "./state";
 
 const ticketsChatModelId = "gemini-3.5-flash-lite" satisfies GeminiModelId;
-
-const searchInputSchema = z.object({
-  query: z.string().describe("Text to match against title and description"),
-});
-
-const mutateInputSchema = z.object({
-  id: z.string(),
-  action: z.enum(["update", "delete"]),
-  fields: z.record(z.string(), z.unknown()).optional(),
-});
 
 export type ProposalView = {
   id: string;
@@ -275,7 +266,7 @@ export class TicketsChatAgentService {
     const search_tickets = tool({
       description:
         "Search the current tenant's tickets. Matches title and description, ignoring letter case. Returns id, title, description, and status. Does not accept a tenant argument.",
-      inputSchema: searchInputSchema,
+      inputSchema: searchTicketsInputSchema,
       execute: async ({ query }) => this.search(tenantId, query),
     });
 
@@ -285,7 +276,7 @@ export class TicketsChatAgentService {
     tools.mutate_ticket = tool({
       description:
         "Propose updating or deleting a ticket the current tenant owns. This never writes. Update fields may only include title, description, and status.",
-      inputSchema: mutateInputSchema,
+      inputSchema: mutateTicketInputSchema,
       execute: async ({ id, action, fields }) =>
         this.propose({ tenantId, id, action, fields }),
     });
