@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { createServices, resetStore } from "../src";
+import { createServices } from "../src";
 
 const openTickets = [
   {
@@ -28,8 +28,7 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
     throw new Error("GEMINI_TEST_API_KEY is missing");
   }
 
-  resetStore();
-  const { ticketsChatAgent } = createServices();
+  const { ticketsAgent: ticketsChatAgent } = createServices();
   const modelIds: string[] = [];
   const handed: string[] = [];
   const toolResults: unknown[] = [];

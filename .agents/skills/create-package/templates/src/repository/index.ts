@@ -1,3 +1,1 @@
-export function createRepository() {
-  return {};
-}
+export { __REPOSITORY__ } from "./__REPOSITORY__";

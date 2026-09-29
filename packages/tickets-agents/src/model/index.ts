@@ -1,3 +1,18 @@
+export { type AgentState, type ThreadRecord } from "./AgentState";
+export {
+  type DecideResult,
+  type Proposal,
+  type ProposalAction,
+  type ProposalState,
+  type ProposalView,
+  type ProposeResult,
+} from "./Proposal";
+export {
+  type IncomingMessage,
+  type ReplyInput,
+  type ReplyObservers,
+  type ReplyResult,
+} from "./Reply";
 export {
   decisionSchema,
   mutateTicketInputSchema,
@@ -7,6 +22,7 @@ export {
   ticketStatusSchema,
   updateFieldsSchema,
   type Decision,
+  type StoredTicket,
   type TenantId,
   type Ticket,
   type TicketStatus,

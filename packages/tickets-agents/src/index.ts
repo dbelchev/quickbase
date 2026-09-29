@@ -1,5 +1,4 @@
 export { createServices } from "./createServices";
-export { resetStore } from "./resetStore";
-export { createRepository } from "./repository";
-export { TicketsChatAgentService } from "./service";
+export { TicketRepository } from "./repository";
+export { TicketsAgentService } from "./service";
 export type * from "./model";

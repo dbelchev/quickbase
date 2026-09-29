@@ -1,11 +1,7 @@
 import { GeminiService } from "@quickbase/inference-provider";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createRepository,
-  resetStore,
-  TicketsChatAgentService,
-} from "../src";
+import { describe, expect, it, vi } from "vitest";
+import { TicketRepository, TicketsAgentService } from "../src";
 
 const tenantBText = [
   "Acme layoff plan",
@@ -61,11 +57,12 @@ function textModel() {
 function createAgent() {
   const model = textModel();
   const resolveModel = vi.fn(() => model);
-  const agent = new TicketsChatAgentService(
-    createRepository(),
+  const repository = new TicketRepository();
+  const agent = new TicketsAgentService(
+    repository,
     new GeminiService(resolveModel),
   );
-  return { agent, model, resolveModel };
+  return { agent, repository, model, resolveModel };
 }
 
 function userMessage(text: string, extraParts: Array<{ type: string }> = []) {
@@ -77,10 +74,6 @@ function userMessage(text: string, extraParts: Array<{ type: string }> = []) {
 }
 
 describe("tickets chat agent", () => {
-  beforeEach(() => {
-    resetStore();
-  });
-
   it("search as Tenant A does not return Tenant B tickets", () => {
     const { agent } = createAgent();
     expect(agent.search("tenant-b", "Acme layoff plan")).toEqual([
@@ -185,8 +178,8 @@ describe("tickets chat agent", () => {
   });
 
   it("approve deletes the ticket once, and the other tenant changes nothing", () => {
-    const { agent: first } = createAgent();
-    const result = first.propose({
+    const { agent } = createAgent();
+    const result = agent.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -195,42 +188,41 @@ describe("tickets chat agent", () => {
       throw new Error("expected a pending proposal");
     }
 
-    const { agent: second } = createAgent();
     expect(
-      second.decide({
+      agent.decide({
         tenantId: "tenant-b",
         proposalId: result.proposal.id,
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
-    expect(second.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     expect(
-      second.decide({
+      agent.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "approve",
       }),
     ).toEqual({ outcome: "applied" });
-    expect(second.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
-      second.decide({
+      agent.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "approve",
       }),
     ).toEqual({ outcome: "already_decided" });
-    expect(second.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
-      second.decide({
+      agent.decide({
         tenantId: "tenant-b",
         proposalId: result.proposal.id,
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
-    expect(second.search("tenant-b", "Acme layoff plan")).toEqual([
+    expect(agent.search("tenant-b", "Acme layoff plan")).toEqual([
       {
         id: "47",
         title: "Confidential plan",
@@ -505,8 +497,8 @@ describe("tickets chat agent", () => {
     expect(resolveModel).not.toHaveBeenCalled();
   });
 
-  it("resetStore restores the seeded tickets and drops proposals", () => {
-    const { agent } = createAgent();
+  it("reset restores the seeded tickets and drops proposals", () => {
+    const { agent, repository } = createAgent();
     const pending = agent.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -522,7 +514,8 @@ describe("tickets chat agent", () => {
     });
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
-    resetStore();
+    repository.reset();
+    agent.reset();
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
     expect(
       agent.decide({

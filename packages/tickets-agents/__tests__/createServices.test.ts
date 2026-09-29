@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createServices, TicketsChatAgentService } from "../src";
+import { createServices, TicketsAgentService } from "../src";
 
 const ENV_KEY = "GEMINI_TEST_API_KEY";
 
@@ -17,8 +17,8 @@ describe("createServices", () => {
   it("returns a tickets chat agent", () => {
     process.env[ENV_KEY] = "test-key";
 
-    const { ticketsChatAgent } = createServices();
+    const { ticketsAgent: ticketsChatAgent } = createServices();
 
-    expect(ticketsChatAgent).toBeInstanceOf(TicketsChatAgentService);
+    expect(ticketsChatAgent).toBeInstanceOf(TicketsAgentService);
   });
 });

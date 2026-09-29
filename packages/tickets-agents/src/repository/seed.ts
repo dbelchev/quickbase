@@ -1,12 +1,4 @@
-import type { TenantId, TicketStatus } from "../model";
-
-export type StoredTicket = {
-  id: string;
-  tenantId: TenantId;
-  title: string;
-  description: string;
-  status: TicketStatus;
-};
+import type { StoredTicket } from "../model";
 
 export function seedTickets(): StoredTicket[] {
   return [

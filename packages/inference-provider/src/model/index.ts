@@ -1,6 +1,7 @@
 export {
   geminiModelIdSchema,
   geminiModelIds,
+  type GeminiModelConfig,
   type GeminiModelId,
+  type ResolvedLanguageModel,
 } from "./Gemini";
-export { type GeminiModelConfig } from "./Gemini";

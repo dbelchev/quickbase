@@ -29,6 +29,14 @@ export const decisionSchema = z.enum(["approve", "reject"]);
 
 export type Decision = z.infer<typeof decisionSchema>;
 
+export type StoredTicket = {
+  id: string;
+  tenantId: TenantId;
+  title: string;
+  description: string;
+  status: TicketStatus;
+};
+
 export const searchTicketsInputSchema = z.object({
   query: z.string().describe("Text to match against title and description"),
 });

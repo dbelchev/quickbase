@@ -1,5 +1,5 @@
 import type { GoogleLanguageModelOptions } from "@ai-sdk/google";
-import { defaultSettingsMiddleware } from "ai";
+import { defaultSettingsMiddleware, type LanguageModel } from "ai";
 import { z } from "zod";
 
 type MiddlewareSettings = NonNullable<
@@ -36,3 +36,5 @@ export const geminiModelIds = [
 export const geminiModelIdSchema = z.enum(geminiModelIds);
 
 export type GeminiModelId = z.infer<typeof geminiModelIdSchema>;
+
+export type ResolvedLanguageModel = Exclude<LanguageModel, string>;

@@ -1,1 +1,1 @@
-export { TicketsChatAgentService } from "./TicketsChatAgentService";
+export { TicketsAgentService } from "./TicketsAgentService";

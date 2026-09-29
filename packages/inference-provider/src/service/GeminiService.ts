@@ -3,15 +3,13 @@ import {
   customProvider,
   defaultSettingsMiddleware,
   wrapLanguageModel,
-  type LanguageModel,
 } from "ai";
 import {
   geminiModelIdSchema,
   type GeminiModelConfig,
   type GeminiModelId,
+  type ResolvedLanguageModel,
 } from "../model";
-
-type ResolvedLanguageModel = Exclude<LanguageModel, string>;
 
 export class GeminiService {
   constructor(

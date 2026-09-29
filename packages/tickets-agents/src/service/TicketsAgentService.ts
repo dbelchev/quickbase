@@ -12,63 +12,39 @@ import {
   searchTicketsInputSchema,
   tenantIdSchema,
   updateFieldsSchema,
+  type AgentState,
   type Decision,
+  type DecideResult,
+  type IncomingMessage,
+  type Proposal,
+  type ProposalView,
+  type ProposeResult,
+  type ReplyInput,
+  type ReplyObservers,
+  type ReplyResult,
   type TenantId,
   type Ticket,
   type UpdateFields,
 } from "../model";
 import type { TicketRepository } from "../repository";
-import { agentState, type Proposal } from "./state";
 
 const ticketsChatModelId = "gemini-3.5-flash-lite" satisfies GeminiModelId;
 
-export type ProposalView = {
-  id: string;
-  tenantId: TenantId;
-  ticketId: string;
-  title: string;
-  description: string;
-  action: Proposal["action"];
-  fields?: UpdateFields;
-};
+export class TicketsAgentService {
+  private readonly state: AgentState = {
+    proposals: [],
+    threads: new Map(),
+  };
 
-export type ProposeResult =
-  | { outcome: "not_found" }
-  | { outcome: "rejected" }
-  | { outcome: "pending"; proposal: ProposalView };
-
-export type DecideResult =
-  | { outcome: "applied" }
-  | { outcome: "rejected" }
-  | { outcome: "not_found" }
-  | { outcome: "already_decided" };
-
-export type ReplyInput = {
-  tenantId: TenantId;
-  threadId: string;
-  messages: unknown[];
-  confirmationProposalId?: string;
-};
-
-export type ReplyObservers = {
-  onModelCall?: (call: { modelId: string; messages: unknown }) => void;
-  onToolResults?: (results: unknown[]) => void;
-};
-
-export type ReplyResult =
-  | { outcome: "mismatch" }
-  | { outcome: "response"; response: Response };
-
-type IncomingMessage = {
-  role?: string;
-  parts?: Array<{ type?: string; text?: string }>;
-};
-
-export class TicketsChatAgentService {
   constructor(
     private readonly repository: TicketRepository,
     private readonly gemini: GeminiService,
   ) {}
+
+  reset(): void {
+    this.state.proposals.length = 0;
+    this.state.threads.clear();
+  }
 
   search(tenantId: TenantId, query: string): Ticket[] {
     return this.repository.search(tenantId, query);
@@ -101,7 +77,7 @@ export class TicketsChatAgentService {
       fields,
       state: "pending",
     };
-    agentState().proposals.push(proposal);
+    this.state.proposals.push(proposal);
     return { outcome: "pending", proposal: viewProposal(proposal) };
   }
 
@@ -112,7 +88,7 @@ export class TicketsChatAgentService {
   }): DecideResult {
     const tenantId = tenantIdSchema.parse(input.tenantId);
     const decision = decisionSchema.parse(input.decision);
-    const proposal = agentState().proposals.find(
+    const proposal = this.state.proposals.find(
       (item) => item.id === input.proposalId,
     );
     if (!proposal || proposal.tenantId !== tenantId) {
@@ -181,7 +157,7 @@ export class TicketsChatAgentService {
     tenantId: TenantId,
     threadId: string,
   ): "ok" | "mismatch" {
-    const threads = agentState().threads;
+    const threads = this.state.threads;
     const existing = threads.get(threadId);
     if (!existing) {
       threads.set(threadId, { tenantId, messages: [] });
@@ -194,7 +170,7 @@ export class TicketsChatAgentService {
     tenantId: TenantId,
     proposalId: string,
   ): { outcome: "applied" | "rejected" } | null {
-    const proposal = agentState().proposals.find(
+    const proposal = this.state.proposals.find(
       (item) => item.id === proposalId && item.tenantId === tenantId,
     );
     if (!proposal) return null;
@@ -215,7 +191,7 @@ export class TicketsChatAgentService {
   ): Promise<Response> {
     const canPropose = !input.confirmation;
     const text = lastUserText(input.messages);
-    const history = threadMessages(input.threadId);
+    const history = this.threadMessages(input.threadId);
     const messages: ModelMessage[] = text
       ? [...history, { role: "user", content: text }]
       : [...history];
@@ -251,8 +227,8 @@ export class TicketsChatAgentService {
           event.toolResults.map((toolResult) => toolResult.output),
         );
       },
-      onEnd(event) {
-        setThreadMessages(input.threadId, [
+      onEnd: (event) => {
+        this.setThreadMessages(input.threadId, [
           ...messages,
           ...event.responseMessages,
         ]);
@@ -282,6 +258,16 @@ export class TicketsChatAgentService {
     });
     return tools;
   }
+
+  private threadMessages(threadId: string): ModelMessage[] {
+    const messages = this.state.threads.get(threadId)?.messages ?? [];
+    return messages as ModelMessage[];
+  }
+
+  private setThreadMessages(threadId: string, messages: ModelMessage[]): void {
+    const thread = this.state.threads.get(threadId);
+    if (thread) thread.messages = messages;
+  }
 }
 
 function viewProposal(proposal: Proposal): ProposalView {
@@ -294,16 +280,6 @@ function viewProposal(proposal: Proposal): ProposalView {
     action: proposal.action,
     fields: proposal.fields,
   };
-}
-
-function threadMessages(threadId: string): ModelMessage[] {
-  const messages = agentState().threads.get(threadId)?.messages ?? [];
-  return messages as ModelMessage[];
-}
-
-function setThreadMessages(threadId: string, messages: ModelMessage[]): void {
-  const thread = agentState().threads.get(threadId);
-  if (thread) thread.messages = messages;
 }
 
 function lastUserText(messages: unknown[]): string {

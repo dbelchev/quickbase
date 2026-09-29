@@ -1,7 +1,5 @@
-import { createRepository } from "../repository";
-
-type Repository = ReturnType<typeof createRepository>;
+import type { __REPOSITORY__ } from "../repository";
 
 export class __SERVICE__ {
-  constructor(_repository: Repository) {}
+  constructor(_repository: __REPOSITORY__) {}
 }
