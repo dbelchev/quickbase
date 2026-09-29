@@ -299,6 +299,31 @@ importers:
         specifier: 'catalog:'
         version: 5.0.2(@types/node@20.19.43)(vite@8.3.1(@types/node@20.19.43)(jiti@2.7.0))
 
+  packages/tickets-agents:
+    dependencies:
+      '@quickbase/inference-provider':
+        specifier: workspace:*
+        version: link:../inference-provider
+      ai:
+        specifier: ^7.0.120
+        version: 7.0.120(zod@4.6.5)
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 20.19.43
+      eslint:
+        specifier: 'catalog:'
+        version: 9.39.5(jiti@2.7.0)(supports-color@7.2.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.2(@types/node@20.19.43)(vite@8.3.1(@types/node@20.19.43)(jiti@2.7.0))
+
 packages:
 
   '@ai-sdk/gateway@4.0.98':

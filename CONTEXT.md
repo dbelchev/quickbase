@@ -1,6 +1,6 @@
 # Quickbase
 
-Language for resolving a language model from an inference provider so a chat agent can run it.
+Language for a tickets chat agent, and for the inference provider that resolves the model it runs.
 
 ## Language
 
@@ -19,3 +19,23 @@ _Avoid_: Google service
 **Chat agent**:
 A caller that runs a model. It is not an inference provider.
 _Avoid_: Bot, assistant
+
+**Tickets chat agent**:
+A chat agent for one tenant's tickets.
+_Avoid_: Planner, bot, assistant
+
+**Ticket**:
+A support item with a title, a description, and a status of open or closed.
+_Avoid_: Issue, case
+
+**Tenant**:
+The owner of a set of tickets.
+_Avoid_: Organization, account, company
+
+**Proposal**:
+A requested update or delete of one ticket. It stays pending until it is approved or rejected.
+_Avoid_: Mutation, edit
+
+**Thread**:
+A conversation bound to one tenant.
+_Avoid_: Session, chat
