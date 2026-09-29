@@ -12,5 +12,6 @@ catalog:
   zod: ^4.6.5
 
 allowBuilds:
+  esbuild: true
   sharp: true
   unrs-resolver: true

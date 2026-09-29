@@ -12,7 +12,7 @@ const eslintConfig = defineConfig([
     "**/next-env.d.ts",
   ]),
   {
-    files: ["packages/**/*.ts"],
+    files: ["packages/**/*.ts", "apps/tickets-server/**/*.ts"],
     extends: [tseslint.configs.recommended],
     rules: {
       "@typescript-eslint/no-unused-vars": [
