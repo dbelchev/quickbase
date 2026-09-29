@@ -10,6 +10,8 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.123",
+    "ai": "^7.0.120",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"

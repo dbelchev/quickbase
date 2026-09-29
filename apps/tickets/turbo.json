@@ -1,6 +1,9 @@
 {
   "extends": ["//"],
   "tasks": {
+    "dev": {
+      "with": ["@quickbase/tickets-server#dev"]
+    },
     "check-types": {
       "outputs": ["*.tsbuildinfo"]
     }

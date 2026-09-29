@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "turbo run dev",
+    "dev:tickets": "turbo run dev --filter=@quickbase/tickets",
     "build": "turbo run build",
     "start": "turbo run start",
     "lint": "turbo run lint",
