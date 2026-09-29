@@ -25,9 +25,10 @@ export class TicketRepository {
 
   search(tenantId: TenantId, query: string): Ticket[] {
     const owner = tenantIdSchema.parse(tenantId);
-    const needle = query.toLowerCase();
-    return this.tickets
-      .filter((ticket) => ticket.tenantId === owner)
+    const owned = this.tickets.filter((ticket) => ticket.tenantId === owner);
+    const needle = query.trim().toLowerCase();
+    if (needle === "" || needle === "*") return owned.map(view);
+    return owned
       .filter(
         (ticket) =>
           ticket.title.toLowerCase().includes(needle) ||

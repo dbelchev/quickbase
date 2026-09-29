@@ -38,7 +38,11 @@ export type StoredTicket = {
 };
 
 export const searchTicketsInputSchema = z.object({
-  query: z.string().describe("Text to match against title and description"),
+  query: z
+    .string()
+    .describe(
+      "Text to match against title and description. An empty string or * lists every ticket.",
+    ),
 });
 
 export const mutateTicketInputSchema = z.object({
