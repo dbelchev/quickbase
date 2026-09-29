@@ -1,12 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
 import committed from "../openapi.json" with { type: "json" };
-import {
-  buildApp,
-  openApiDocument,
-  type OpenApiDocument,
-  type TicketsChatAgent,
-} from "../src/app";
+import { buildApp } from "../src/app";
+import type { TicketsChatAgent } from "../src/model";
+import { openApiDocument, type OpenApiDocument } from "../src/openapi";
 import { start } from "../src/index";
 
 const streamHeaders = {

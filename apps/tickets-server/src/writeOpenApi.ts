@@ -1,5 +1,5 @@
 import { writeFileSync } from "node:fs";
-import { openApiDocument } from "./app";
+import { openApiDocument } from "./openapi";
 
 const document = await openApiDocument();
 writeFileSync(
