@@ -3,6 +3,6 @@ import { createServices } from "./index";
 
 describe("createServices", () => {
   it("returns the services", () => {
-    expect(createServices()).toEqual({});
+    expect(createServices()).toEqual({ service: {} });
   });
 });

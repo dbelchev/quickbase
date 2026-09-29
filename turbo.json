@@ -17,6 +17,7 @@
       "persistent": true
     },
     "lint": {
+      "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/eslint.config.mjs"]
     },
     "check-types": {

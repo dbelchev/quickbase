@@ -17,7 +17,7 @@ A domain package lives in `packages/<name>` and is named `@quickbase/<name>`. Te
 3. From the repo root, run `pnpm install`. Completion: the lockfile lists `@quickbase/<name>`.
 4. Run `pnpm --filter @quickbase/<name> test` and `pnpm --filter @quickbase/<name> check-types`. Completion: both exit 0.
 
-The skill's work ends at the new package. Wiring it into `client` is a separate change. When `client` depends on the package, add `@quickbase/<name>` to `transpilePackages` in `client/next.config.ts` so Next compiles its TypeScript source.
+The skill's work ends at the new package. Wiring it into `apps/tickets` is a separate change. When `apps/tickets` depends on the package, add `@quickbase/<name>` to `transpilePackages` in `apps/tickets/next.config.ts` so Next compiles its TypeScript source.
 
 ## Zod
 
@@ -25,7 +25,7 @@ Zod is a runtime dependency of every domain package (`"zod": "catalog:"`). Every
 
 ## createServices
 
-`createServices()` takes no parameters. It calls `createRepository()`, passes that repository to the service constructor, and returns the services.
+`createServices()` takes no parameters. It calls `createRepository()`, passes that repository to the service constructor, and returns an object whose properties are the services.
 
 A package that needs another one depends on it with `"@quickbase/<other>": "workspace:*"` and calls that package's `createServices()` from inside its own `createServices()`.
 

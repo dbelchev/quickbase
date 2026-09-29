@@ -22,7 +22,7 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    files: ["client/**/*.{js,jsx,mjs,ts,tsx}"],
+    files: ["apps/tickets/**/*.{js,jsx,mjs,ts,tsx}"],
     extends: [...nextVitals, ...nextTs],
   },
 ]);

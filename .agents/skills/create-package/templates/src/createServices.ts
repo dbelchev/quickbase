@@ -3,5 +3,7 @@ import { createService } from "./service";
 
 export function createServices() {
   const repository = createRepository();
-  return createService(repository);
+  return {
+    service: createService(repository),
+  };
 }
