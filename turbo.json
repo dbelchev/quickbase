@@ -10,11 +10,13 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["GEMINI_TEST_API_KEY"]
     },
     "start": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": ["GEMINI_TEST_API_KEY"]
     },
     "lint": {
       "dependsOn": ["transit"],
