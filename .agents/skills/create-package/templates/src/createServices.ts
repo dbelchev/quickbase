@@ -1,9 +1,9 @@
 import { createRepository } from "./repository";
-import { createService } from "./service";
+import { __SERVICE__ } from "./service";
 
 export function createServices() {
   const repository = createRepository();
   return {
-    service: createService(repository),
+    service: new __SERVICE__(repository),
   };
 }

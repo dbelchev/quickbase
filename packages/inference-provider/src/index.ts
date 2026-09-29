@@ -1,3 +1,3 @@
 export { createServices } from "./createServices";
-export { __SERVICE__ } from "./service";
+export { GeminiService } from "./service";
 export type * from "./model";

@@ -1,5 +1,5 @@
 {
-  "name": "@quickbase/__PACKAGE__",
+  "name": "@quickbase/inference-provider",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,6 +13,8 @@
     "test:watch": "vitest --watch"
   },
   "dependencies": {
+    "@ai-sdk/google": "^4.0.84",
+    "ai": "^7.0.120",
     "zod": "catalog:"
   },
   "devDependencies": {

@@ -12,8 +12,8 @@ A domain package lives in `packages/<name>` and is named `@quickbase/<name>`. Te
 
 ## Steps
 
-1. Take the package name as a single folder segment. Completion: the folder is `packages/<name>` and the package name is `@quickbase/<name>`.
-2. Copy every file in `templates/` into that folder. Replace `__PACKAGE__` with `<name>`. Completion: the tree matches `templates/`, with the package name filled in.
+1. Take the package name as a single folder segment and the service class name in PascalCase ending in `Service`. Completion: the folder is `packages/<name>` and the package name is `@quickbase/<name>`.
+2. Copy every file in `templates/` into that folder. Replace `__PACKAGE__` with `<name>` and `__SERVICE__` with the service class name, including the service filename. Completion: the tree matches `templates/`, with those tokens filled in.
 3. From the repo root, run `pnpm install`. Completion: the lockfile lists `@quickbase/<name>`.
 4. Run `pnpm --filter @quickbase/<name> test` and `pnpm --filter @quickbase/<name> check-types`. Completion: both exit 0.
 
@@ -23,10 +23,20 @@ The skill's work ends at the new package. Wiring it into `apps/tickets` is a sep
 
 Zod is a runtime dependency of every domain package (`"zod": "catalog:"`). Every Zod schema lives in `src/model/`. The TypeScript type for a schema is `z.infer<typeof schema>`, declared in that same file. `src/index.ts` exports those types. `service/` and `repository/` import schemas and types from `model/`.
 
-## createServices
+## Services
 
-`createServices()` takes no parameters. It calls `createRepository()`, passes that repository to the service constructor, and returns an object whose properties are the services.
+A service is a class. Its file is `src/service/<Name>Service.ts`, and the class name matches the filename. `src/service/index.ts` exports only that class.
+
+`createServices()` takes no parameters. It constructs each service and returns an object whose properties are those instances. A package that stores data has a repository: `createServices()` calls `createRepository()` and passes that repository to the service constructor. A package that stores nothing has no repository, and `createServices()` constructs its services directly.
 
 A package that needs another one depends on it with `"@quickbase/<other>": "workspace:*"` and calls that package's `createServices()` from inside its own `createServices()`.
 
-`src/index.ts` exports `createServices` and the model types. Tests inside the package import `service/` and `repository/` by relative path. The scaffold test calls `createServices()` and expects the services object.
+`src/index.ts` exports `createServices`, the service classes, and the model types.
+
+## Tests
+
+Tests live in the package's `__tests__/` directory as `*.test.ts`. They import the package through `../src`. The shared Vitest config includes `src/**/*.test.ts`, so the package `vitest.config.ts` sets `test.include` to `__tests__/**/*.test.ts`. `tsconfig.json` includes `src` and `__tests__`.
+
+## Node types
+
+`process` is typed by `@types/node` (`"@types/node": "catalog:"` in `devDependencies`). `tsconfig.json` sets `compilerOptions.types` to `["node"]`.

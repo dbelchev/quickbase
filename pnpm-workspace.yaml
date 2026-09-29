@@ -3,6 +3,7 @@ packages:
   - "packages/*"
 
 catalog:
+  "@types/node": ^20.19.43
   eslint: ^9.39.5
   turbo: ^2.11.5
   typescript: ^5.9.3
