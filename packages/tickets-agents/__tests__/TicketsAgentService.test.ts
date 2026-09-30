@@ -4,6 +4,7 @@ import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createServices,
+  ProposalService,
   TicketRepository,
   TicketsAgentService,
 } from "../src";
@@ -66,11 +67,13 @@ function createAgent() {
   const resolveModel = vi.fn(() => model);
   const { database } = createDatabase();
   const repository = new TicketRepository(database);
+  const proposals = new ProposalService(repository);
   const agent = new TicketsAgentService(
     repository,
+    proposals,
     new GeminiService(resolveModel),
   );
-  return { agent, repository, model, resolveModel };
+  return { agent, proposals, repository, model, resolveModel };
 }
 
 function userMessage(text: string, extraParts: Array<{ type: string }> = []) {
@@ -92,14 +95,15 @@ describe("tickets chat agent", () => {
     }
   });
 
-  it("opens an empty connection and returns the ticket repository and the tickets chat agent", () => {
+  it("returns the proposal service sharing the ticket repository with the tickets chat agent", () => {
     process.env[ENV_KEY] = "test-key";
     const { database } = createDatabase();
     expect(() => database.prepare("SELECT id FROM tickets").all()).toThrow();
 
-    const { tickets, ticketsChatAgent } = createServices(database);
+    const { tickets, proposals, ticketsChatAgent } = createServices(database);
 
     expect(tickets).toBeInstanceOf(TicketRepository);
+    expect(proposals).toBeInstanceOf(ProposalService);
     expect(ticketsChatAgent).toBeInstanceOf(TicketsAgentService);
     expect(tickets.search("tenant-a", "*")).toEqual([
       badge,
@@ -113,7 +117,7 @@ describe("tickets chat agent", () => {
       },
     ]);
 
-    const pending = ticketsChatAgent.propose({
+    const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -121,7 +125,8 @@ describe("tickets chat agent", () => {
     if (pending.outcome !== "pending") {
       throw new Error("expected a pending proposal");
     }
-    ticketsChatAgent.decide({
+    expect(tickets.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: pending.proposal.id,
       decision: "approve",
@@ -205,7 +210,7 @@ describe("tickets chat agent", () => {
   });
 
   it("treats percent and underscore as literal search text", () => {
-    const { agent, repository } = createAgent();
+    const { proposals, repository } = createAgent();
 
     expect(repository.search("tenant-a", "%")).toEqual([]);
     expect(repository.search("tenant-a", "_")).toEqual([
@@ -218,13 +223,13 @@ describe("tickets chat agent", () => {
       },
     ]);
 
-    const percent = agent.propose({
+    const percent = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "update",
       fields: { title: "100% done" },
     });
-    const underscore = agent.propose({
+    const underscore = proposals.propose({
       tenantId: "tenant-a",
       id: "2",
       action: "update",
@@ -233,12 +238,12 @@ describe("tickets chat agent", () => {
     if (percent.outcome !== "pending" || underscore.outcome !== "pending") {
       throw new Error("expected two proposals");
     }
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: percent.proposal.id,
       decision: "approve",
     });
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: underscore.proposal.id,
       decision: "approve",
@@ -270,8 +275,8 @@ describe("tickets chat agent", () => {
   });
 
   it("proposing a delete of another tenant's ticket returns not_found and stores nothing", () => {
-    const { agent } = createAgent();
-    const result = agent.propose({
+    const { agent, proposals } = createAgent();
+    const result = proposals.propose({
       tenantId: "tenant-a",
       id: "47",
       action: "delete",
@@ -292,8 +297,8 @@ describe("tickets chat agent", () => {
   });
 
   it("a pending delete stays unapplied when the chat says approved", async () => {
-    const { agent, model } = createAgent();
-    const result = agent.propose({
+    const { agent, proposals, model } = createAgent();
+    const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -338,8 +343,8 @@ describe("tickets chat agent", () => {
   });
 
   it("approve deletes the ticket once, and the other tenant changes nothing", () => {
-    const { agent } = createAgent();
-    const result = agent.propose({
+    const { agent, proposals } = createAgent();
+    const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -349,7 +354,7 @@ describe("tickets chat agent", () => {
     }
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-b",
         proposalId: result.proposal.id,
         decision: "approve",
@@ -358,7 +363,7 @@ describe("tickets chat agent", () => {
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "approve",
@@ -367,7 +372,7 @@ describe("tickets chat agent", () => {
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "approve",
@@ -376,7 +381,7 @@ describe("tickets chat agent", () => {
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-b",
         proposalId: result.proposal.id,
         decision: "approve",
@@ -393,9 +398,9 @@ describe("tickets chat agent", () => {
   });
 
   it("update proposes only title, description, and status, and approve writes those fields", () => {
-    const { agent } = createAgent();
+    const { agent, proposals } = createAgent();
     expect(
-      agent.propose({
+      proposals.propose({
         tenantId: "tenant-a",
         id: "2",
         action: "update",
@@ -404,7 +409,7 @@ describe("tickets chat agent", () => {
     ).toEqual({ outcome: "rejected" });
     expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
 
-    const pending = agent.propose({
+    const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "2",
       action: "update",
@@ -434,7 +439,7 @@ describe("tickets chat agent", () => {
     }
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: pending.proposal.id,
         decision: "approve",
@@ -451,8 +456,8 @@ describe("tickets chat agent", () => {
   });
 
   it("an update with no fields proposes a change that writes nothing until approve", () => {
-    const { agent } = createAgent();
-    const pending = agent.propose({
+    const { agent, proposals } = createAgent();
+    const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "2",
       action: "update",
@@ -473,7 +478,7 @@ describe("tickets chat agent", () => {
     expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: pending.proposal.id,
         decision: "approve",
@@ -483,8 +488,8 @@ describe("tickets chat agent", () => {
   });
 
   it("a pending proposal is not treated as decided, and a recorded decision cannot write", async () => {
-    const { agent, model } = createAgent();
-    const result = agent.propose({
+    const { agent, proposals, model } = createAgent();
+    const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -504,7 +509,7 @@ describe("tickets chat agent", () => {
     expect(toolNames(model)).toContain("mutate_ticket");
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: result.proposal.id,
       decision: "approve",
@@ -527,8 +532,8 @@ describe("tickets chat agent", () => {
   });
 
   it("reject leaves the ticket unchanged and the proposal cannot be decided again", () => {
-    const { agent } = createAgent();
-    const result = agent.propose({
+    const { agent, proposals } = createAgent();
+    const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -538,7 +543,7 @@ describe("tickets chat agent", () => {
     }
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "reject",
@@ -547,7 +552,7 @@ describe("tickets chat agent", () => {
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: result.proposal.id,
         decision: "approve",
@@ -557,20 +562,20 @@ describe("tickets chat agent", () => {
   });
 
   it("a later request for the same change creates a new proposal", () => {
-    const { agent } = createAgent();
-    const first = agent.propose({
+    const { agent, proposals } = createAgent();
+    const first = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
     });
     if (first.outcome !== "pending") throw new Error("expected a proposal");
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: first.proposal.id,
       decision: "reject",
     });
 
-    const second = agent.propose({
+    const second = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -578,7 +583,7 @@ describe("tickets chat agent", () => {
     if (second.outcome !== "pending") throw new Error("expected a proposal");
     expect(second.proposal.id).not.toBe(first.proposal.id);
 
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: second.proposal.id,
       decision: "approve",
@@ -587,13 +592,13 @@ describe("tickets chat agent", () => {
   });
 
   it("approving a proposal whose ticket is no longer owned writes nothing", () => {
-    const { agent } = createAgent();
-    const deletion = agent.propose({
+    const { agent, proposals } = createAgent();
+    const deletion = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
     });
-    const update = agent.propose({
+    const update = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "update",
@@ -603,13 +608,13 @@ describe("tickets chat agent", () => {
       throw new Error("expected two proposals");
     }
 
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: deletion.proposal.id,
       decision: "approve",
     });
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: update.proposal.id,
         decision: "approve",
@@ -658,8 +663,8 @@ describe("tickets chat agent", () => {
   });
 
   it("reset restores the seeded tickets and drops proposals", () => {
-    const { agent } = createAgent();
-    const pending = agent.propose({
+    const { agent, proposals } = createAgent();
+    const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
       action: "delete",
@@ -667,7 +672,7 @@ describe("tickets chat agent", () => {
     if (pending.outcome !== "pending") {
       throw new Error("expected a pending proposal");
     }
-    agent.decide({
+    proposals.decide({
       tenantId: "tenant-a",
       proposalId: pending.proposal.id,
       decision: "approve",
@@ -677,7 +682,7 @@ describe("tickets chat agent", () => {
     agent.reset();
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
     expect(
-      agent.decide({
+      proposals.decide({
         tenantId: "tenant-a",
         proposalId: pending.proposal.id,
         decision: "approve",

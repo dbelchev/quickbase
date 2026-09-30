@@ -14,8 +14,12 @@ export async function start(
   ) => Promise<unknown> = (app, options) => app.listen(options),
 ) {
   const { database } = createDatabase();
-  const { ticketsChatAgent } = createTicketsAgents(database);
-  const app = await buildApp(ticketsChatAgent);
+  const { proposals, ticketsChatAgent } = createTicketsAgents(database);
+  const app = await buildApp({
+    reply: (input) => ticketsChatAgent.reply(input),
+    decide: (input) => proposals.decide(input),
+    reset: () => ticketsChatAgent.reset(),
+  });
   await listen(app, { port });
   return app;
 }
