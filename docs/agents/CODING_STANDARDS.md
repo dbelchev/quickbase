@@ -32,3 +32,5 @@ For `/code-review` Standards: pass **this file** (skill list + this protocol) to
 ## Overrides
 
 > Project-specific rules that differ from the generic skills, or conventions the skills cannot know. Add entries here as they emerge.
+
+A domain package that stores records takes a `Database` from `@quickbase/database` as `db` in `createServices`. The rule is in `create-package`, under Services.

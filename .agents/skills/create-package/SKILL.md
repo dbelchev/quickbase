@@ -27,9 +27,13 @@ Zod is a runtime dependency of every domain package (`"zod": "catalog:"`). Every
 
 A service is a class. Its file is `src/service/<Name>Service.ts`, and the class name matches the filename. `src/service/index.ts` exports only that class.
 
-`createServices()` takes no parameters. It constructs each service and returns an object whose properties are those instances.
+`createServices()` of a package with no stored records takes no parameters. It constructs each service and returns an object whose properties are those instances.
 
-A package that needs another one depends on it with `"@quickbase/<other>": "workspace:*"` and calls that package's `createServices()` from inside its own `createServices()`.
+A package that stores records takes a `Database` from `@quickbase/database` as `db`, the argument to `createServices`. It constructs each repository with `db` and passes the repository to the service constructor. The composition root calls `@quickbase/database`'s `createServices()` and passes `database` in as `db`.
+
+`@quickbase/database` is infrastructure, not a domain package. Its `createServices()` takes no parameters and returns `{ database }`, an empty in-memory connection. It has no model, service, or repository.
+
+A package that needs another domain package depends on it with `"@quickbase/<other>": "workspace:*"` and calls that package's `createServices()` from inside its own `createServices()`.
 
 ## Repositories
 
