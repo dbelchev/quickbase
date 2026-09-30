@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "node --env-file-if-exists=.env.local ./node_modules/turbo/bin/turbo run dev",
-    "dev:tickets": "node --env-file-if-exists=.env.local ./node_modules/turbo/bin/turbo run dev --filter=@quickbase/tickets",
+    "dev:tickets": "node scripts/ensure-gemini-test-api-key.mjs && node --env-file-if-exists=.env.local ./node_modules/turbo/bin/turbo run dev --filter=@quickbase/tickets",
     "build": "turbo run build",
     "start": "node --env-file-if-exists=.env.local ./node_modules/turbo/bin/turbo run start",
     "lint": "turbo run lint",
-    "test": "turbo run test",
+    "test": "node --test scripts/ensure-gemini-test-api-key.test.mjs && turbo run test",
     "test:watch": "turbo run //#test:projects:watch",
     "check-types": "turbo run check-types",
     "test:projects:watch": "vitest --watch"

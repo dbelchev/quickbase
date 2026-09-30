@@ -2,10 +2,8 @@
 
 ## Environment
 
-`createServices` reads `GEMINI_TEST_API_KEY` from the environment. Create a local env file and set the key:
+`createServices` reads `GEMINI_TEST_API_KEY` from the environment. `pnpm dev:tickets` checks `.env.local` before Turbo starts. When that file is missing, or `GEMINI_TEST_API_KEY` is absent or blank, the command asks for the key, writes it into `.env.local`, and only then starts Turbo. A later run with a non-empty value skips the prompt. A blank entry asks again. Closing the prompt exits without writing the file or starting Turbo.
 
-```sh
-cp .env.example .env.local
-```
+In a non-interactive shell, `pnpm dev:tickets` exits before Turbo starts and tells you to set `GEMINI_TEST_API_KEY` in `.env.local`.
 
-`.env.local` stays untracked. Packages do not load that file. `pnpm dev`, `pnpm dev:tickets`, and `pnpm start` load it into the environment before Turbo starts the client and server. An already set `GEMINI_TEST_API_KEY` is left as-is. Turbo passes that variable through to the `dev` and `start` tasks.
+`pnpm dev` and `pnpm start` load `.env.local` when it exists, then start Turbo. Packages load the key from the environment Turbo passes through, and `.env.local` stays untracked. An already set `GEMINI_TEST_API_KEY` in the shell is left as-is when Turbo starts.
