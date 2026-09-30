@@ -1,24 +1,5 @@
-import { createRequire } from "node:module";
+import type { Database } from "@quickbase/database";
 import { seedTickets } from "./seed";
-
-const requireSqlite = createRequire(import.meta.url);
-
-export type SqlValue = string | number | bigint | null;
-
-export type SqlStatement = {
-  all(...anonymousParameters: SqlValue[]): unknown[];
-  get(...anonymousParameters: SqlValue[]): unknown;
-  run(...anonymousParameters: SqlValue[]): { changes: number | bigint };
-};
-
-export type TicketDatabase = {
-  exec(sql: string): void;
-  prepare(sql: string): SqlStatement;
-};
-
-type SqliteModule = {
-  DatabaseSync: new (location: string) => TicketDatabase;
-};
 
 const schema = `
 CREATE TABLE tickets (
@@ -30,15 +11,12 @@ CREATE TABLE tickets (
   PRIMARY KEY (tenant_id, id)
 )`;
 
-export function openTicketDatabase(): TicketDatabase {
-  const { DatabaseSync } = requireSqlite("node:sqlite") as SqliteModule;
-  const database = new DatabaseSync(":memory:");
+export function loadTicketStore(database: Database): void {
   database.exec(schema);
   insertSeed(database);
-  return database;
 }
 
-export function reseedTicketDatabase(database: TicketDatabase): void {
+export function reseedTicketDatabase(database: Database): void {
   database.exec("BEGIN");
   try {
     database.exec("DELETE FROM tickets");
@@ -50,7 +28,7 @@ export function reseedTicketDatabase(database: TicketDatabase): void {
   }
 }
 
-function insertSeed(database: TicketDatabase): void {
+function insertSeed(database: Database): void {
   const insert = database.prepare(
     `INSERT INTO tickets (tenant_id, id, title, description, status)
      VALUES (?, ?, ?, ?, ?)`,

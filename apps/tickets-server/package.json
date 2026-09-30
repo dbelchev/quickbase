@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@fastify/swagger": "^9.9.0",
+    "@quickbase/database": "workspace:*",
     "@quickbase/tickets-agents": "workspace:*",
     "fastify": "^5.12.5",
     "fastify-type-provider-zod": "^7.0.0",

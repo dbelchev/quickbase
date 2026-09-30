@@ -1,5 +1,5 @@
 {
-  "name": "@quickbase/tickets-agents",
+  "name": "@quickbase/database",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,12 +11,6 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest --watch"
-  },
-  "dependencies": {
-    "@quickbase/database": "workspace:*",
-    "@quickbase/inference-provider": "workspace:*",
-    "ai": "^7.0.120",
-    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

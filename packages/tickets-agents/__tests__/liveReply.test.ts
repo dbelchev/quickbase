@@ -1,3 +1,4 @@
+import { createServices as createDatabase } from "@quickbase/database";
 import { expect, it } from "vitest";
 import { createServices } from "../src";
 
@@ -28,7 +29,8 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
     throw new Error("GEMINI_TEST_API_KEY is missing");
   }
 
-  const { ticketsAgent: ticketsChatAgent } = createServices();
+  const { database } = createDatabase();
+  const { tickets, ticketsChatAgent } = createServices(database);
   const modelIds: string[] = [];
   const handed: string[] = [];
   const toolResults: unknown[] = [];
@@ -70,8 +72,8 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
   const handedToAgent = `${handed.join("\n")}\n${JSON.stringify(toolResults)}`;
   expect(toolResults.length).toBeGreaterThan(0);
   expect(handedToAgent).not.toContain("Acme layoff plan");
-  expect(ticketsChatAgent.search("tenant-a", "")).toEqual(openTickets);
-  expect(ticketsChatAgent.search("tenant-b", "Acme layoff plan")).toEqual([
+  expect(tickets.search("tenant-a", "")).toEqual(openTickets);
+  expect(tickets.search("tenant-b", "Acme layoff plan")).toEqual([
     {
       id: "47",
       title: "Confidential plan",

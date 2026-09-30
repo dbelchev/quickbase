@@ -1,3 +1,4 @@
+import type { Database } from "@quickbase/database";
 import {
   tenantIdSchema,
   ticketSchema,
@@ -5,7 +6,7 @@ import {
   type Ticket,
   type UpdateFields,
 } from "../model";
-import { reseedTicketDatabase, type TicketDatabase } from "./database";
+import { loadTicketStore, reseedTicketDatabase } from "./database";
 
 const listByTenant = `
   SELECT id, title, description, status
@@ -26,7 +27,9 @@ const searchByText = `
 `;
 
 export class TicketRepository {
-  constructor(private readonly database: TicketDatabase) {}
+  constructor(private readonly database: Database) {
+    loadTicketStore(database);
+  }
 
   reset(): void {
     reseedTicketDatabase(this.database);

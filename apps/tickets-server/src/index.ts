@@ -1,6 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { createServices } from "@quickbase/tickets-agents";
+import { createServices as createDatabase } from "@quickbase/database";
+import { createServices as createTicketsAgents } from "@quickbase/tickets-agents";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "./app";
 
@@ -12,8 +13,9 @@ export async function start(
     options: { port: number },
   ) => Promise<unknown> = (app, options) => app.listen(options),
 ) {
-  const { ticketsAgent } = createServices();
-  const app = await buildApp(ticketsAgent);
+  const { database } = createDatabase();
+  const { ticketsChatAgent } = createTicketsAgents(database);
+  const app = await buildApp(ticketsChatAgent);
   await listen(app, { port });
   return app;
 }
