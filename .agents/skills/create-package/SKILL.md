@@ -41,6 +41,8 @@ A repository is a class. Its file is `src/repository/<Name>Repository.ts`, and t
 
 `createServices()` constructs each repository with `new` and passes that instance to the service constructor. A package that stores nothing has no repository, and `createServices()` constructs its services directly.
 
+A repository that stores records builds each query with the shared `compiler` from `@quickbase/database` and runs it with `all`, `get`, or `run` on the injected connection. `compiler` is the SQLite Knex compiler and has no connection of its own. `all`, `get`, and `run` stay synchronous. Creating a table, the reseed delete, and seed inserts stay SQL strings on the connection. Knex is a dependency of `@quickbase/database` only.
+
 `src/index.ts` exports `createServices`, the service classes, the repository classes, and the model types.
 
 ## Tests

@@ -17,5 +17,8 @@
     "eslint": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "dependencies": {
+    "knex": "^3.3.0"
   }
 }
