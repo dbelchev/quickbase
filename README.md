@@ -11,7 +11,7 @@ pnpm install
 pnpm dev:tickets
 ```
 
-`pnpm dev:tickets` reads `GEMINI_TEST_API_KEY` from `.env.local` before Turbo starts.
+`pnpm dev:tickets` asks for `GEMINI_TEST_API_KEY` and stores it in `.env.local`.
 
 The UI is [http://localhost:3000](http://localhost:3000). The API listens on port 3001. The header switches between Tenant A and Tenant B. Reset reseeds tickets and clears proposals and threads.
 
