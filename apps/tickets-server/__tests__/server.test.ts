@@ -30,10 +30,30 @@ function standIn(): TicketsChatAgent {
     decide: () => {
       throw new Error("decide called");
     },
+    reset() {},
   };
 }
 
 describe("tickets server", () => {
+  it("reseeds storage without a tenant", async () => {
+    let reseeded = false;
+    const app = await buildApp({
+      ...standIn(),
+      reset() {
+        reseeded = true;
+      },
+    });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/reset",
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.body).toBe("");
+    expect(reseeded).toBe(true);
+  });
+
   it("rejects a missing tenant before the tickets chat agent runs", async () => {
     const app = await buildApp(standIn());
 

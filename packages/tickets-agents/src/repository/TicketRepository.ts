@@ -1,48 +1,63 @@
 import {
   tenantIdSchema,
-  type StoredTicket,
+  ticketSchema,
   type TenantId,
   type Ticket,
   type UpdateFields,
 } from "../model";
-import { seedTickets } from "./seed";
+import { reseedTicketDatabase, type TicketDatabase } from "./database";
 
-function view(ticket: StoredTicket): Ticket {
-  return {
-    id: ticket.id,
-    title: ticket.title,
-    description: ticket.description,
-    status: ticket.status,
-  };
-}
+const listByTenant = `
+  SELECT id, title, description, status
+  FROM tickets
+  WHERE tenant_id = ?
+  ORDER BY rowid
+`;
+
+const searchByText = `
+  SELECT id, title, description, status
+  FROM tickets
+  WHERE tenant_id = ?
+    AND (
+      title LIKE ? ESCAPE '\\'
+      OR description LIKE ? ESCAPE '\\'
+    )
+  ORDER BY rowid
+`;
 
 export class TicketRepository {
-  private tickets = seedTickets();
+  constructor(private readonly database: TicketDatabase) {}
 
   reset(): void {
-    this.tickets = seedTickets();
+    reseedTicketDatabase(this.database);
   }
 
   search(tenantId: TenantId, query: string): Ticket[] {
     const owner = tenantIdSchema.parse(tenantId);
-    const owned = this.tickets.filter((ticket) => ticket.tenantId === owner);
-    const needle = query.trim().toLowerCase();
-    if (needle === "" || needle === "*") return owned.map(view);
-    return owned
-      .filter(
-        (ticket) =>
-          ticket.title.toLowerCase().includes(needle) ||
-          ticket.description.toLowerCase().includes(needle),
-      )
-      .map(view);
+    const needle = query.trim();
+    if (needle === "" || needle === "*") {
+      return this.database
+        .prepare(listByTenant)
+        .all(owner)
+        .map((row) => ticketSchema.parse(row));
+    }
+    const pattern = likePattern(needle);
+    return this.database
+      .prepare(searchByText)
+      .all(owner, pattern, pattern)
+      .map((row) => ticketSchema.parse(row));
   }
 
   find(tenantId: TenantId, id: string): Ticket | null {
     const owner = tenantIdSchema.parse(tenantId);
-    const ticket = this.tickets.find(
-      (item) => item.id === id && item.tenantId === owner,
-    );
-    return ticket ? view(ticket) : null;
+    const row = this.database
+      .prepare(
+        `SELECT id, title, description, status
+         FROM tickets
+         WHERE tenant_id = ? AND id = ?`,
+      )
+      .get(owner, id);
+    return row ? ticketSchema.parse(row) : null;
   }
 
   applyUpdate(
@@ -51,27 +66,46 @@ export class TicketRepository {
     fields: UpdateFields,
   ): "applied" | "not_found" {
     const owner = tenantIdSchema.parse(tenantId);
-    const ticket = this.tickets.find(
-      (item) => item.id === id && item.tenantId === owner,
-    );
-    if (!ticket) return "not_found";
-    if (fields.title !== undefined) ticket.title = fields.title;
-    if (fields.description !== undefined) {
-      ticket.description = fields.description;
+    const assignments: string[] = [];
+    const values: string[] = [];
+    if (fields.title !== undefined) {
+      assignments.push("title = ?");
+      values.push(fields.title);
     }
-    if (fields.status !== undefined) ticket.status = fields.status;
-    return "applied";
+    if (fields.description !== undefined) {
+      assignments.push("description = ?");
+      values.push(fields.description);
+    }
+    if (fields.status !== undefined) {
+      assignments.push("status = ?");
+      values.push(fields.status);
+    }
+    if (assignments.length === 0) {
+      return this.find(owner, id) ? "applied" : "not_found";
+    }
+    const result = this.database
+      .prepare(
+        `UPDATE tickets
+         SET ${assignments.join(", ")}
+         WHERE tenant_id = ? AND id = ?`,
+      )
+      .run(...values, owner, id);
+    return Number(result.changes) === 0 ? "not_found" : "applied";
   }
 
   delete(tenantId: TenantId, id: string): "applied" | "not_found" {
     const owner = tenantIdSchema.parse(tenantId);
-    const exists = this.tickets.some(
-      (item) => item.id === id && item.tenantId === owner,
-    );
-    if (!exists) return "not_found";
-    this.tickets = this.tickets.filter(
-      (item) => !(item.id === id && item.tenantId === owner),
-    );
-    return "applied";
+    const result = this.database
+      .prepare(`DELETE FROM tickets WHERE tenant_id = ? AND id = ?`)
+      .run(owner, id);
+    return Number(result.changes) === 0 ? "not_found" : "applied";
   }
+}
+
+function likePattern(query: string): string {
+  const escaped = query
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+  return `%${escaped}%`;
 }

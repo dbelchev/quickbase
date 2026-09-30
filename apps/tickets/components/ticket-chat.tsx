@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ApprovalModal,
   type PendingProposal,
@@ -22,19 +22,52 @@ const pendingConfirmations = new Map<string, string>();
 export function TicketChat() {
   const [tenantId, setTenantId] = useState<TenantId>("tenant-a");
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
+  const [sessionBusy, setSessionBusy] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const reportSessionBusy = useCallback((busy: boolean) => {
+    setSessionBusy(busy);
+  }, []);
 
   function selectTenant(next: TenantId) {
     if (next === tenantId) return;
     setTenantId(next);
     setThreadId(crypto.randomUUID());
+    setResetError(null);
+  }
+
+  async function resetStorage() {
+    setResetting(true);
+    setResetError(null);
+    try {
+      const response = await fetch("/api/reset", { method: "POST" });
+      if (!response.ok) {
+        setResetError("Storage was not reset.");
+        return;
+      }
+      setThreadId(crypto.randomUUID());
+    } catch {
+      setResetError("Storage was not reset.");
+    } finally {
+      setResetting(false);
+    }
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="border-b border-zinc-200 dark:border-zinc-800">
+      <header className="relative z-30 border-b border-zinc-200 bg-background dark:border-zinc-800">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4 px-4 py-3">
           <h1 className="text-lg font-semibold">Tickets</h1>
-          <div role="radiogroup" aria-label="Tenant" className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void resetStorage()}
+              disabled={sessionBusy || resetting}
+              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
+            >
+              Reset
+            </button>
+            <div role="radiogroup" aria-label="Tenant" className="flex gap-2">
             {tenants.map((tenant) => {
               const selected = tenant.id === tenantId;
               return (
@@ -54,10 +87,24 @@ export function TicketChat() {
                 </button>
               );
             })}
+            </div>
           </div>
         </div>
+        {resetError ? (
+          <p
+            role="alert"
+            className="mx-auto w-full max-w-3xl px-4 pb-3 text-sm text-red-700 dark:text-red-400"
+          >
+            {resetError}
+          </p>
+        ) : null}
       </header>
-      <ChatSession key={threadId} tenantId={tenantId} threadId={threadId} />
+      <ChatSession
+        key={threadId}
+        tenantId={tenantId}
+        threadId={threadId}
+        onBusyChange={reportSessionBusy}
+      />
     </div>
   );
 }
@@ -65,15 +112,18 @@ export function TicketChat() {
 function ChatSession({
   tenantId,
   threadId,
+  onBusyChange,
 }: {
   tenantId: TenantId;
   threadId: string;
+  onBusyChange: (busy: boolean) => void;
 }) {
   const [decisions, setDecisions] = useState<
     Record<string, "applied" | "rejected">
   >({});
   const [draft, setDraft] = useState("");
   const [decisionError, setDecisionError] = useState<string | null>(null);
+  const [deciding, setDeciding] = useState(false);
 
   const transport = useMemo(
     () =>
@@ -99,34 +149,45 @@ function ChatSession({
   });
 
   const proposal = firstPendingProposal(messages, decisions);
-  const busy = status === "submitted" || status === "streaming";
+  const replying = status === "submitted" || status === "streaming";
+  const busy = replying || deciding;
+
+  useEffect(() => {
+    onBusyChange(busy);
+    return () => onBusyChange(false);
+  }, [busy, onBusyChange]);
 
   async function decide(decision: "approve" | "reject") {
     if (!proposal) return;
+    setDeciding(true);
     setDecisionError(null);
-    const response = await fetch("/api/decisions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Tenant-ID": tenantId,
-      },
-      body: JSON.stringify({ proposalId: proposal.id, decision }),
-    });
-    if (!response.ok) {
-      setDecisionError("The decision was not recorded.");
-      return;
-    }
-    const body = (await response.json()) as { outcome?: string };
-    const outcome = body.outcome === "applied" ? "applied" : "rejected";
-    setDecisions((current) => ({ ...current, [proposal.id]: outcome }));
-    pendingConfirmations.set(threadId, proposal.id);
     try {
-      await sendMessage({
-        text: "Confirm the recorded decision.",
-        metadata: { confirmation: true },
+      const response = await fetch("/api/decisions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Tenant-ID": tenantId,
+        },
+        body: JSON.stringify({ proposalId: proposal.id, decision }),
       });
+      if (!response.ok) {
+        setDecisionError("The decision was not recorded.");
+        return;
+      }
+      const body = (await response.json()) as { outcome?: string };
+      const outcome = body.outcome === "applied" ? "applied" : "rejected";
+      setDecisions((current) => ({ ...current, [proposal.id]: outcome }));
+      pendingConfirmations.set(threadId, proposal.id);
+      try {
+        await sendMessage({
+          text: "Confirm the recorded decision.",
+          metadata: { confirmation: true },
+        });
+      } finally {
+        pendingConfirmations.delete(threadId);
+      }
     } finally {
-      pendingConfirmations.delete(threadId);
+      setDeciding(false);
     }
   }
 

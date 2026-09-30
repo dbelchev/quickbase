@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
         source: "/api/decisions",
         destination: `${ticketsServer}/api/decisions`,
       },
+      { source: "/api/reset", destination: `${ticketsServer}/api/reset` },
     ];
   },
 };

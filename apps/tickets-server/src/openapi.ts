@@ -16,6 +16,10 @@ export async function openApiDocument(): Promise<OpenApiDocument> {
     // A JSON response schema would make a generated client parse the reply as JSON.
     chat.responses["200"] = uiMessageStreamResponse;
   }
+  const reset = document.paths?.["/api/reset"]?.post;
+  if (reset?.responses?.["204"]) {
+    reset.responses["204"] = { description: "Tickets reseeded" };
+  }
   if (
     document.components?.schemas &&
     Object.keys(document.components.schemas).length === 0
@@ -37,5 +41,6 @@ function standIn(): TicketsChatAgent {
     decide() {
       return { outcome: "not_found" };
     },
+    reset() {},
   };
 }

@@ -42,6 +42,7 @@ export class TicketsAgentService {
   ) {}
 
   reset(): void {
+    this.repository.reset();
     this.state.proposals.length = 0;
     this.state.threads.clear();
   }

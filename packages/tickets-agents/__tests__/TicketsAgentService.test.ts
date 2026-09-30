@@ -1,7 +1,7 @@
 import { GeminiService } from "@quickbase/inference-provider";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
-import { TicketRepository, TicketsAgentService } from "../src";
+import { openTicketDatabase, TicketRepository, TicketsAgentService } from "../src";
 
 const tenantBText = [
   "Acme layoff plan",
@@ -57,7 +57,7 @@ function textModel() {
 function createAgent() {
   const model = textModel();
   const resolveModel = vi.fn(() => model);
-  const repository = new TicketRepository();
+  const repository = new TicketRepository(openTicketDatabase());
   const agent = new TicketsAgentService(
     repository,
     new GeminiService(resolveModel),
@@ -527,7 +527,7 @@ describe("tickets chat agent", () => {
   });
 
   it("reset restores the seeded tickets and drops proposals", () => {
-    const { agent, repository } = createAgent();
+    const { agent } = createAgent();
     const pending = agent.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -543,7 +543,6 @@ describe("tickets chat agent", () => {
     });
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
 
-    repository.reset();
     agent.reset();
     expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
     expect(

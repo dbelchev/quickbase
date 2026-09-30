@@ -243,6 +243,15 @@
           }
         }
       }
+    },
+    "/api/reset": {
+      "post": {
+        "responses": {
+          "204": {
+            "description": "Tickets reseeded"
+          }
+        }
+      }
     }
   }
 }

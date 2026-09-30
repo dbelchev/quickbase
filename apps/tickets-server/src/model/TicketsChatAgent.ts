@@ -13,4 +13,5 @@ export type TicketsChatAgent = {
     proposalId: string;
     decision: Decision;
   }): DecideResult;
+  reset(): void;
 };

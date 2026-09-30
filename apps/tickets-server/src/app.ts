@@ -9,6 +9,7 @@ import { registerSwagger } from "./plugins/swagger";
 import { registerTenantHook } from "./plugins/tenant";
 import { registerChatRoutes } from "./routes/chat";
 import { registerDecisionRoutes } from "./routes/decisions";
+import { registerResetRoutes } from "./routes/reset";
 
 export type { TicketsChatAgent } from "./model";
 
@@ -23,5 +24,6 @@ export async function buildApp(
   registerTenantHook(app);
   registerChatRoutes(app, ticketsChatAgent);
   registerDecisionRoutes(app, ticketsChatAgent);
+  registerResetRoutes(app, ticketsChatAgent);
   return app;
 }

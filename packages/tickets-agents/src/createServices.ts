@@ -1,12 +1,12 @@
 import { createServices as createInferenceServices } from "@quickbase/inference-provider";
-import { TicketRepository } from "./repository";
+import { openTicketDatabase, TicketRepository } from "./repository";
 import { TicketsAgentService } from "./service";
 
 export function createServices() {
   const { gemini } = createInferenceServices();
   return {
     ticketsAgent: new TicketsAgentService(
-      new TicketRepository(),
+      new TicketRepository(openTicketDatabase()),
       gemini,
     ),
   };
