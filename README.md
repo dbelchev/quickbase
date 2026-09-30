@@ -4,7 +4,7 @@ A tickets chat agent demo. A person chats about one tenant's support tickets. Th
 
 ## Run
 
-Requires pnpm 11 and a Node.js version that includes `node:sqlite`.
+Requires Node.js 24+ and pnpm 11. Node.js 24 includes `node:sqlite`.
 
 ```bash
 pnpm install
@@ -23,7 +23,7 @@ The UI is [http://localhost:3000](http://localhost:3000). The API listens on por
 | --- | --- |
 | Next.js | Chat app, and the rewrite from the browser to the API |
 | React | Chat UI, including the approval modal |
-| Node.js | Runtime for the API and the packages |
+| Node.js 24+ | Runtime for the API and the packages |
 | Fastify | HTTP server for chat, decisions, and reset |
 | Zod | Schemas for requests, tool inputs, and ticket fields |
 | Vercel AI SDK | Streams the model turn and the chat UI |
