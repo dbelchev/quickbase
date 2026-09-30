@@ -1,4 +1,4 @@
-export { type AgentState, type ThreadRecord } from "./AgentState";
+export { type ThreadRecord } from "./Thread";
 export {
   type DecideResult,
   type Proposal,

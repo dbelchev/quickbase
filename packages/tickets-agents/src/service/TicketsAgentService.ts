@@ -10,38 +10,30 @@ import {
   mutateTicketInputSchema,
   searchTicketsInputSchema,
   tenantIdSchema,
-  type AgentState,
   type IncomingMessage,
   type ReplyInput,
   type ReplyObservers,
   type ReplyResult,
   type TenantId,
-  type Ticket,
 } from "../model";
 import type { TicketRepository } from "../repository";
 import type { ProposalService } from "./ProposalService";
+import type { ThreadService } from "./ThreadService";
 
 const ticketsChatModelId = "gemini-3.5-flash-lite" satisfies GeminiModelId;
 
 export class TicketsAgentService {
-  private readonly state: AgentState = {
-    threads: new Map(),
-  };
-
   constructor(
     private readonly repository: TicketRepository,
     private readonly proposals: ProposalService,
+    private readonly threads: ThreadService,
     private readonly gemini: GeminiService,
   ) {}
 
   reset(): void {
     this.repository.reset();
     this.proposals.reset();
-    this.state.threads.clear();
-  }
-
-  search(tenantId: TenantId, query: string): Ticket[] {
-    return this.repository.search(tenantId, query);
+    this.threads.reset();
   }
 
   async reply(
@@ -49,7 +41,7 @@ export class TicketsAgentService {
     observers?: ReplyObservers,
   ): Promise<ReplyResult> {
     const tenantId = tenantIdSchema.parse(input.tenantId);
-    if (this.bindThread(tenantId, input.threadId) === "mismatch") {
+    if (this.threads.bind(tenantId, input.threadId) === "mismatch") {
       return { outcome: "mismatch" };
     }
 
@@ -77,19 +69,6 @@ export class TicketsAgentService {
     return { outcome: "response", response };
   }
 
-  private bindThread(
-    tenantId: TenantId,
-    threadId: string,
-  ): "ok" | "mismatch" {
-    const threads = this.state.threads;
-    const existing = threads.get(threadId);
-    if (!existing) {
-      threads.set(threadId, { tenantId, messages: [] });
-      return "ok";
-    }
-    return existing.tenantId === tenantId ? "ok" : "mismatch";
-  }
-
   private async runTurn(
     input: {
       tenantId: TenantId;
@@ -101,7 +80,7 @@ export class TicketsAgentService {
   ): Promise<Response> {
     const canPropose = !input.confirmation;
     const text = lastUserText(input.messages);
-    const history = this.threadMessages(input.threadId);
+    const history = this.threads.messages(input.threadId);
     const messages: ModelMessage[] = text
       ? [...history, { role: "user", content: text }]
       : [...history];
@@ -138,7 +117,7 @@ export class TicketsAgentService {
         );
       },
       onEnd: (event) => {
-        this.setThreadMessages(input.threadId, [
+        this.threads.setMessages(input.threadId, [
           ...messages,
           ...event.responseMessages,
         ]);
@@ -153,7 +132,7 @@ export class TicketsAgentService {
       description:
         "Search the current tenant's tickets. Matches title and description, ignoring letter case. An empty query or * lists every ticket. Returns id, title, description, and status. Does not accept a tenant argument.",
       inputSchema: searchTicketsInputSchema,
-      execute: async ({ query }) => this.search(tenantId, query),
+      execute: async ({ query }) => this.repository.search(tenantId, query),
     });
 
     const tools: ToolSet = { search_tickets };
@@ -167,16 +146,6 @@ export class TicketsAgentService {
         this.proposals.propose({ tenantId, id, action, fields }),
     });
     return tools;
-  }
-
-  private threadMessages(threadId: string): ModelMessage[] {
-    const messages = this.state.threads.get(threadId)?.messages ?? [];
-    return messages as ModelMessage[];
-  }
-
-  private setThreadMessages(threadId: string, messages: ModelMessage[]): void {
-    const thread = this.state.threads.get(threadId);
-    if (thread) thread.messages = messages;
   }
 }
 

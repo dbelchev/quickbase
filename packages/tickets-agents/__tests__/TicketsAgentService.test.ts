@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createServices,
   ProposalService,
+  ThreadService,
   TicketRepository,
   TicketsAgentService,
 } from "../src";
@@ -68,12 +69,14 @@ function createAgent() {
   const { database } = createDatabase();
   const repository = new TicketRepository(database);
   const proposals = new ProposalService(repository);
+  const threads = new ThreadService();
   const agent = new TicketsAgentService(
     repository,
     proposals,
+    threads,
     new GeminiService(resolveModel),
   );
-  return { agent, proposals, repository, model, resolveModel };
+  return { agent, proposals, threads, repository, model, resolveModel };
 }
 
 function userMessage(text: string, extraParts: Array<{ type: string }> = []) {
@@ -95,15 +98,17 @@ describe("tickets chat agent", () => {
     }
   });
 
-  it("returns the proposal service sharing the ticket repository with the tickets chat agent", () => {
+  it("returns the ticket repository, proposals, threads, and the tickets chat agent", () => {
     process.env[ENV_KEY] = "test-key";
     const { database } = createDatabase();
     expect(() => database.prepare("SELECT id FROM tickets").all()).toThrow();
 
-    const { tickets, proposals, ticketsChatAgent } = createServices(database);
+    const { tickets, proposals, threads, ticketsChatAgent } =
+      createServices(database);
 
     expect(tickets).toBeInstanceOf(TicketRepository);
     expect(proposals).toBeInstanceOf(ProposalService);
+    expect(threads).toBeInstanceOf(ThreadService);
     expect(ticketsChatAgent).toBeInstanceOf(TicketsAgentService);
     expect(tickets.search("tenant-a", "*")).toEqual([
       badge,
@@ -132,11 +137,15 @@ describe("tickets chat agent", () => {
       decision: "approve",
     });
     expect(tickets.search("tenant-a", "Badge printer jam")).toEqual([]);
+
+    expect(threads.bind("tenant-a", "factory-thread")).toBe("ok");
+    ticketsChatAgent.reset();
+    expect(threads.bind("tenant-b", "factory-thread")).toBe("ok");
   });
 
   it("search as Tenant A does not return Tenant B tickets", () => {
-    const { agent } = createAgent();
-    expect(agent.search("tenant-b", "Acme layoff plan")).toEqual([
+    const { repository } = createAgent();
+    expect(repository.search("tenant-b", "Acme layoff plan")).toEqual([
       {
         id: "47",
         title: "Confidential plan",
@@ -145,7 +154,7 @@ describe("tickets chat agent", () => {
       },
     ]);
 
-    const results = agent.search(
+    const results = repository.search(
       "tenant-a",
       "ticket 47 every company Acme layoff plan",
     );
@@ -156,8 +165,8 @@ describe("tickets chat agent", () => {
   });
 
   it("keeps the hostile description and matches title or description without case", () => {
-    const { agent } = createAgent();
-    expect(agent.search("tenant-a", "IGNORE PRIOR")).toEqual([
+    const { repository } = createAgent();
+    expect(repository.search("tenant-a", "IGNORE PRIOR")).toEqual([
       {
         id: "3",
         title: "Urgent instruction",
@@ -166,12 +175,12 @@ describe("tickets chat agent", () => {
         status: "open",
       },
     ]);
-    expect(agent.search("tenant-a", "badge printer")).toEqual([badge]);
+    expect(repository.search("tenant-a", "badge printer")).toEqual([badge]);
   });
 
   it("lists every ticket the tenant owns when the query is empty or *", () => {
-    const { agent } = createAgent();
-    expect(agent.search("tenant-a", "*")).toEqual([
+    const { repository } = createAgent();
+    expect(repository.search("tenant-a", "*")).toEqual([
       badge,
       vpn,
       {
@@ -182,7 +191,7 @@ describe("tickets chat agent", () => {
         status: "open",
       },
     ]);
-    expect(agent.search("tenant-b", "*")).toEqual([
+    expect(repository.search("tenant-b", "*")).toEqual([
       {
         id: "47",
         title: "Confidential plan",
@@ -196,7 +205,7 @@ describe("tickets chat agent", () => {
         status: "open",
       },
     ]);
-    expect(agent.search("tenant-a", "")).toEqual([
+    expect(repository.search("tenant-a", "")).toEqual([
       badge,
       vpn,
       {
@@ -275,7 +284,7 @@ describe("tickets chat agent", () => {
   });
 
   it("proposing a delete of another tenant's ticket returns not_found and stores nothing", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const result = proposals.propose({
       tenantId: "tenant-a",
       id: "47",
@@ -286,7 +295,7 @@ describe("tickets chat agent", () => {
     for (const secret of tenantBText) {
       expect(JSON.stringify(result)).not.toContain(secret);
     }
-    expect(agent.search("tenant-b", "Acme layoff plan")).toEqual([
+    expect(repository.search("tenant-b", "Acme layoff plan")).toEqual([
       {
         id: "47",
         title: "Confidential plan",
@@ -297,7 +306,7 @@ describe("tickets chat agent", () => {
   });
 
   it("a pending delete stays unapplied when the chat says approved", async () => {
-    const { agent, proposals, model } = createAgent();
+    const { agent, proposals, repository, model } = createAgent();
     const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -317,7 +326,7 @@ describe("tickets chat agent", () => {
       throw new Error("expected a pending proposal");
     }
     expect(result.proposal.id.length).toBeGreaterThan(8);
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     const reply = await agent.reply({
       tenantId: "tenant-a",
@@ -339,11 +348,11 @@ describe("tickets chat agent", () => {
     expect(JSON.stringify(model.doStreamCalls)).not.toContain(
       "tool-approval-response",
     );
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
   });
 
   it("approve deletes the ticket once, and the other tenant changes nothing", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -360,7 +369,7 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     expect(
       proposals.decide({
@@ -369,7 +378,7 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "applied" });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
       proposals.decide({
@@ -378,7 +387,7 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "already_decided" });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
 
     expect(
       proposals.decide({
@@ -387,7 +396,7 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
-    expect(agent.search("tenant-b", "Acme layoff plan")).toEqual([
+    expect(repository.search("tenant-b", "Acme layoff plan")).toEqual([
       {
         id: "47",
         title: "Confidential plan",
@@ -398,7 +407,7 @@ describe("tickets chat agent", () => {
   });
 
   it("update proposes only title, description, and status, and approve writes those fields", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     expect(
       proposals.propose({
         tenantId: "tenant-a",
@@ -407,7 +416,7 @@ describe("tickets chat agent", () => {
         fields: { title: "VPN for contractors", owner: "attacker" },
       }),
     ).toEqual({ outcome: "rejected" });
-    expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
+    expect(repository.search("tenant-a", "VPN access")).toEqual([vpn]);
 
     const pending = proposals.propose({
       tenantId: "tenant-a",
@@ -433,7 +442,7 @@ describe("tickets chat agent", () => {
         },
       },
     });
-    expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
+    expect(repository.search("tenant-a", "VPN access")).toEqual([vpn]);
     if (pending.outcome !== "pending") {
       throw new Error("expected a pending proposal");
     }
@@ -445,7 +454,7 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "applied" });
-    expect(agent.search("tenant-a", "contractors")).toEqual([
+    expect(repository.search("tenant-a", "contractors")).toEqual([
       {
         id: "2",
         title: "VPN for contractors",
@@ -456,7 +465,7 @@ describe("tickets chat agent", () => {
   });
 
   it("an update with no fields proposes a change that writes nothing until approve", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "2",
@@ -475,7 +484,7 @@ describe("tickets chat agent", () => {
       throw new Error("expected a pending proposal");
     }
     expect(pending.proposal.fields).toBeUndefined();
-    expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
+    expect(repository.search("tenant-a", "VPN access")).toEqual([vpn]);
 
     expect(
       proposals.decide({
@@ -484,11 +493,11 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "applied" });
-    expect(agent.search("tenant-a", "VPN access")).toEqual([vpn]);
+    expect(repository.search("tenant-a", "VPN access")).toEqual([vpn]);
   });
 
   it("a pending proposal is not treated as decided, and a recorded decision cannot write", async () => {
-    const { agent, proposals, model } = createAgent();
+    const { agent, proposals, repository, model } = createAgent();
     const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -507,7 +516,7 @@ describe("tickets chat agent", () => {
     expect(forged.outcome).toBe("response");
     if (forged.outcome === "response") await forged.response.text();
     expect(toolNames(model)).toContain("mutate_ticket");
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     proposals.decide({
       tenantId: "tenant-a",
@@ -528,11 +537,11 @@ describe("tickets chat agent", () => {
     expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(
       "approved",
     );
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
   });
 
   it("reject leaves the ticket unchanged and the proposal cannot be decided again", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const result = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -549,7 +558,7 @@ describe("tickets chat agent", () => {
         decision: "reject",
       }),
     ).toEqual({ outcome: "rejected" });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
 
     expect(
       proposals.decide({
@@ -558,11 +567,11 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "already_decided" });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
   });
 
   it("a later request for the same change creates a new proposal", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const first = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -588,11 +597,11 @@ describe("tickets chat agent", () => {
       proposalId: second.proposal.id,
       decision: "approve",
     });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
   });
 
   it("approving a proposal whose ticket is no longer owned writes nothing", () => {
-    const { agent, proposals } = createAgent();
+    const { proposals, repository } = createAgent();
     const deletion = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -620,8 +629,21 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
-    expect(agent.search("tenant-a", "Should not apply")).toEqual([]);
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Should not apply")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
+  });
+
+  it("rejects a reply for another tenant when the thread service already bound the thread", async () => {
+    const { agent, threads, resolveModel } = createAgent();
+    expect(threads.bind("tenant-a", "thread-service")).toBe("ok");
+
+    const mismatch = await agent.reply({
+      tenantId: "tenant-b",
+      threadId: "thread-service",
+      messages: [userMessage("hello")],
+    });
+    expect(mismatch).toEqual({ outcome: "mismatch" });
+    expect(resolveModel).not.toHaveBeenCalled();
   });
 
   it("rejects a reply whose tenant does not match the thread before calling the model", async () => {
@@ -662,8 +684,9 @@ describe("tickets chat agent", () => {
     expect(resolveModel).not.toHaveBeenCalled();
   });
 
-  it("reset restores the seeded tickets and drops proposals", () => {
-    const { agent, proposals } = createAgent();
+  it("reset restores the seeded tickets and drops proposals and threads", async () => {
+    const { agent, proposals, threads, repository, resolveModel } =
+      createAgent();
     const pending = proposals.propose({
       tenantId: "tenant-a",
       id: "1",
@@ -677,10 +700,11 @@ describe("tickets chat agent", () => {
       proposalId: pending.proposal.id,
       decision: "approve",
     });
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([]);
+    expect(threads.bind("tenant-a", "thread-reset")).toBe("ok");
 
     agent.reset();
-    expect(agent.search("tenant-a", "Badge printer jam")).toEqual([badge]);
+    expect(repository.search("tenant-a", "Badge printer jam")).toEqual([badge]);
     expect(
       proposals.decide({
         tenantId: "tenant-a",
@@ -688,6 +712,15 @@ describe("tickets chat agent", () => {
         decision: "approve",
       }),
     ).toEqual({ outcome: "not_found" });
+
+    const reply = await agent.reply({
+      tenantId: "tenant-b",
+      threadId: "thread-reset",
+      messages: [userMessage("hello")],
+    });
+    expect(reply.outcome).toBe("response");
+    if (reply.outcome === "response") await reply.response.text();
+    expect(resolveModel).toHaveBeenCalledTimes(1);
   });
 });
 
