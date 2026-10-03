@@ -666,6 +666,20 @@ describe("tickets chat agent", () => {
     expect(resolveModel).toHaveBeenCalledWith("gemini-3.5-flash-lite");
   });
 
+  it("tells the model to leave ticket fields to the client", async () => {
+    const { agent, model } = createAgent();
+    const result = await agent.reply({
+      tenantId: "tenant-a",
+      threadId: "thread-lead-in",
+      messages: [userMessage("List the tickets")],
+    });
+    expect(result.outcome).toBe("response");
+    if (result.outcome === "response") await result.response.text();
+    expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(
+      "When search_tickets returns tickets, write at most one short sentence. Do not restate id, title, status, or description. The client renders those.",
+    );
+  });
+
   it("returns a missing-message response and does not call the model", async () => {
     const { agent, resolveModel } = createAgent();
     const reply = await agent.reply({

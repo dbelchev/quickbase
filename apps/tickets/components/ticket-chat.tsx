@@ -13,8 +13,13 @@ import {
   ApprovalModal,
   type PendingProposal,
 } from "@/components/approval-modal";
+import {
+  UpdateTicketDialog,
+  type UpdateTicket,
+} from "@/components/update-ticket-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Spinner } from "@/components/ui/spinner";
@@ -150,6 +155,7 @@ function ChatSession({
     Record<string, "applied" | "rejected">
   >({});
   const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<UpdateTicket | null>(null);
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [deciding, setDeciding] = useState(false);
 
@@ -220,12 +226,20 @@ function ChatSession({
     }
   }
 
-  const fieldLocked = busy || proposal !== null;
+  const threadLocked = busy || proposal !== null;
+  const fieldLocked = threadLocked || editing !== null;
 
-  async function submitMessage({ text }: { text: string }) {
+  async function submitMessage({
+    text,
+    clearDraft = false,
+  }: {
+    text: string;
+    clearDraft?: boolean;
+  }) {
     const trimmed = text.trim();
-    if (!trimmed || fieldLocked) return;
-    setDraft("");
+    if (!trimmed || threadLocked) return;
+    if (clearDraft) setDraft("");
+    setEditing(null);
     await sendMessage({ text: trimmed });
   }
 
@@ -254,7 +268,15 @@ function ChatSession({
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
                 >
-                  <ThreadMessage decisions={decisions} message={message} />
+                  <ThreadMessage
+                    decisions={decisions}
+                    locked={fieldLocked}
+                    message={message}
+                    onDelete={(ticket) =>
+                      void submitMessage({ text: `Delete ticket ${ticket.id}` })
+                    }
+                    onUpdate={setEditing}
+                  />
                 </MessageScrollerItem>
               ))}
               {error ? (
@@ -281,15 +303,25 @@ function ChatSession({
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <ThreadComposer
             draft={draft}
+            editing={editing !== null}
             locked={fieldLocked}
             pending={proposal !== null}
             onDraftChange={setDraft}
-            onSubmit={(text) => void submitMessage({ text })}
+            onSubmit={(text) =>
+              void submitMessage({ text, clearDraft: true })
+            }
           />
         </div>
       </div>
       {proposal ? (
         <ApprovalModal proposal={proposal} onDecide={decide} />
+      ) : null}
+      {editing ? (
+        <UpdateTicketDialog
+          ticket={editing}
+          onCancel={() => setEditing(null)}
+          onSubmit={(text) => void submitMessage({ text })}
+        />
       ) : null}
     </>
   );
@@ -297,12 +329,14 @@ function ChatSession({
 
 function ThreadComposer({
   draft,
+  editing,
   locked,
   pending,
   onDraftChange,
   onSubmit,
 }: {
   draft: string;
+  editing: boolean;
   locked: boolean;
   pending: boolean;
   onDraftChange: (draft: string) => void;
@@ -339,7 +373,13 @@ function ThreadComposer({
           onCompositionEnd={() => setComposing(false)}
           onCompositionStart={() => setComposing(true)}
           onKeyDown={onKeyDown}
-          placeholder={pending ? "Decide the pending change first." : "Message"}
+          placeholder={
+            pending
+              ? "Decide the pending change first."
+              : editing
+                ? "Finish the update first."
+                : "Message"
+          }
           value={draft}
         />
         <InputGroupAddon align="block-end" className="justify-end">
@@ -361,11 +401,17 @@ function ThreadComposer({
 function ThreadMessage({
   message,
   decisions,
+  locked,
+  onDelete,
+  onUpdate,
 }: {
   message: ChatMessage;
   decisions: Record<string, "applied" | "rejected">;
+  locked: boolean;
+  onDelete: (ticket: UpdateTicket) => void;
+  onUpdate: (ticket: UpdateTicket) => void;
 }) {
-  const text = messageText(message);
+  const text = visibleText(message);
   const tools = message.parts.filter((part) => part.type.startsWith("tool-"));
   const fromPerson = message.role === "user";
 
@@ -390,7 +436,10 @@ function ThreadMessage({
               "toolCallId" in part ? part.toolCallId : `${part.type}-${index}`
             }
             decisions={decisions}
+            locked={locked}
             part={part}
+            onDelete={onDelete}
+            onUpdate={onUpdate}
           />
         ))}
       </MessageContent>
@@ -418,6 +467,28 @@ export function messageText(message: {
     .filter((part) => part.type === "text")
     .map((part) => part.text ?? "")
     .join("");
+}
+
+function visibleText(message: ChatMessage): string {
+  const text = messageText(message);
+  if (!hasTicketCards(message)) return text;
+  return textBeforeTicketList(text);
+}
+
+function textBeforeTicketList(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const listStart = lines.findIndex((line) =>
+    /^\s*(?:\d+\.|[-*])\s+\S/.test(line),
+  );
+  if (listStart === -1) return text;
+  return lines.slice(0, listStart).join("\n").trim();
+}
+
+function hasTicketCards(message: ChatMessage): boolean {
+  return message.parts.some((part) => {
+    if (part.type !== "tool-search_tickets" || !("output" in part)) return false;
+    return Array.isArray(part.output) && part.output.some((hit) => readTicket(hit));
+  });
 }
 
 function ThreadAlert({ children }: { children: string }) {
@@ -450,9 +521,15 @@ function readTicket(value: unknown): TicketCardModel | null {
 function ToolRecord({
   part,
   decisions,
+  locked,
+  onDelete,
+  onUpdate,
 }: {
   part: ChatMessage["parts"][number];
   decisions: Record<string, "applied" | "rejected">;
+  locked: boolean;
+  onDelete: (ticket: UpdateTicket) => void;
+  onUpdate: (ticket: UpdateTicket) => void;
 }) {
   const name = part.type.slice("tool-".length);
   const input = "input" in part ? part.input : undefined;
@@ -486,7 +563,15 @@ function ToolRecord({
           {output.map((hit, index) => {
             const ticket = readTicket(hit);
             if (!ticket) return null;
-            return <TicketCard key={`${ticket.id}-${index}`} ticket={ticket} />;
+            return (
+              <TicketCard
+                key={`${ticket.id}-${index}`}
+                locked={locked}
+                ticket={ticket}
+                onDelete={() => onDelete(ticket)}
+                onUpdate={() => onUpdate(ticket)}
+              />
+            );
           })}
         </div>
       ) : null}
@@ -494,18 +579,55 @@ function ToolRecord({
   );
 }
 
-function TicketCard({ ticket }: { ticket: TicketCardModel }) {
+function TicketCard({
+  ticket,
+  locked,
+  onDelete,
+  onUpdate,
+}: {
+  ticket: TicketCardModel;
+  locked: boolean;
+  onDelete: () => void;
+  onUpdate: () => void;
+}) {
   return (
     <Card className="w-full min-w-0">
-      <CardContent className="flex min-w-0 items-center gap-3">
-        <Badge variant={ticket.status === "closed" ? "secondary" : "default"}>
-          {ticket.status}
-        </Badge>
-        <span className="shrink-0 whitespace-nowrap">{ticket.id}</span>
-        <span className="min-w-0 shrink truncate font-medium">{ticket.title}</span>
-        <span className="min-w-0 flex-[1_2_0%] truncate text-muted-foreground">
-          {ticket.description}
-        </span>
+      <CardContent className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 items-center gap-3">
+          <Badge
+            className="shrink-0"
+            variant={ticket.status === "closed" ? "secondary" : "default"}
+          >
+            {ticket.status}
+          </Badge>
+          <span className="shrink-0 whitespace-nowrap">{ticket.id}</span>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {ticket.description}
+          </span>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              disabled={locked}
+              aria-label={`Update ticket ${ticket.id}`}
+              onClick={onUpdate}
+            >
+              Update
+            </Button>
+            <Button
+              type="button"
+              size="xs"
+              variant="destructive"
+              disabled={locked}
+              aria-label={`Delete ticket ${ticket.id}`}
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
+          </div>
+        </div>
+        <span className="min-w-0 truncate font-medium">{ticket.title}</span>
       </CardContent>
     </Card>
   );

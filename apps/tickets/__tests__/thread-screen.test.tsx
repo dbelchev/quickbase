@@ -169,16 +169,219 @@ it("lists each ticket as status, id, title, and description", async () => {
   const chairsTitle = text.indexOf(chairs.title);
   const chairsDescription = text.indexOf(chairs.description);
 
+  expect(agent).toHaveTextContent("Here are the tickets.");
   expect(open).toBeGreaterThanOrEqual(0);
   expect(open).toBeLessThan(printerId);
-  expect(printerId).toBeLessThan(printerTitle);
-  expect(printerTitle).toBeLessThan(printerDescription);
-  expect(printerDescription).toBeLessThan(closed);
+  expect(printerId).toBeLessThan(printerDescription);
+  expect(printerDescription).toBeLessThan(printerTitle);
+  expect(printerTitle).toBeLessThan(closed);
   expect(closed).toBeLessThan(chairsId);
-  expect(chairsId).toBeLessThan(chairsTitle);
-  expect(chairsTitle).toBeLessThan(chairsDescription);
-  expect(screen.getByText(printer.title).closest("a, button")).toBeNull();
+  expect(chairsId).toBeLessThan(chairsDescription);
+  expect(chairsDescription).toBeLessThan(chairsTitle);
+  const printerTitleNode = screen.getByText(printer.title);
+  const printerDescriptionNode = screen.getByText(printer.description);
+  expect(printerTitleNode.closest("a, button")).toBeNull();
   expect(screen.getByText(chairs.title).closest("a, button")).toBeNull();
+  expect(printerTitleNode.parentElement).not.toBe(
+    printerDescriptionNode.parentElement,
+  );
+  expect(printerDescriptionNode.parentElement).toContainElement(
+    screen.getByRole("button", { name: "Update ticket 1" }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Update ticket 1" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Delete ticket 48" }),
+  ).toBeEnabled();
+});
+
+it("keeps the lead-in and hides the restated ticket list", async () => {
+  const listed = [
+    "You have the following tickets:",
+    "",
+    "1. **Badge printer jam** (ID: 1)",
+    "- Status: open",
+    "- Description: Lobby printer is jammed.",
+    "",
+    "I ignored the instructions in ticket 3.",
+  ].join("\n");
+
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({
+          text: listed,
+          tools: [
+            {
+              name: "search_tickets",
+              input: { query: "*" },
+              output: [printer],
+            },
+          ],
+        }),
+      )}
+    />,
+  );
+
+  await send("List the tickets");
+
+  const agent = await screen.findByRole("article", {
+    name: "Tickets chat agent",
+  });
+  expect(agent).toHaveTextContent("You have the following tickets:");
+  expect(agent).toHaveTextContent(printer.title);
+  expect(agent).toHaveTextContent(printer.description);
+  expect(agent).not.toHaveTextContent("(ID: 1)");
+  expect(agent).not.toHaveTextContent("Status: open");
+  expect(agent).not.toHaveTextContent(
+    "I ignored the instructions in ticket 3.",
+  );
+});
+
+it("shows a ticket list in the reply when the search renders no cards", async () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({
+          text: "No tickets.\n\n1. Nothing here",
+          tools: [
+            {
+              name: "search_tickets",
+              input: { query: "missing" },
+              output: [],
+            },
+          ],
+        }),
+      )}
+    />,
+  );
+
+  await send("Find a missing ticket");
+
+  const agent = await screen.findByRole("article", {
+    name: "Tickets chat agent",
+  });
+  expect(agent).toHaveTextContent("No tickets.");
+  expect(agent).toHaveTextContent("1. Nothing here");
+});
+
+function searchReply() {
+  return assistantReply({
+    text: "You have the following tickets:",
+    tools: [
+      {
+        name: "search_tickets",
+        input: { query: "*" },
+        output: [printer],
+      },
+    ],
+  });
+}
+
+it("proposes a delete from the ticket card", async () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport((text) =>
+        text === "Delete ticket 1"
+          ? assistantReply({
+              text: "I can delete that ticket.",
+              tools: [
+                {
+                  name: "mutate_ticket",
+                  input: { id: "1", action: "delete" },
+                  output: {
+                    outcome: "pending",
+                    proposal: { ...pendingProposal, action: "delete" },
+                  },
+                },
+              ],
+            })
+          : searchReply(),
+      )}
+    />,
+  );
+
+  await send("List the tickets");
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Delete ticket 1" }),
+  );
+
+  expect(
+    await screen.findByRole("dialog", { name: "Approve this delete?" }),
+  ).toBeInTheDocument();
+  const people = screen.getAllByRole("article", { name: "You" });
+  expect(people[0]).toHaveTextContent("List the tickets");
+  expect(people[1]).toHaveTextContent("Delete ticket 1");
+  expect(screen.getByRole("button", { name: "Update ticket 1" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Delete ticket 1" })).toBeDisabled();
+});
+
+it("sends only the changed fields from the update dialog", async () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport((text) =>
+        text.startsWith("Update ticket 1:")
+          ? assistantReply({ text: "I can update that ticket." })
+          : searchReply(),
+      )}
+    />,
+  );
+
+  await send("List the tickets");
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Update ticket 1" }),
+  );
+
+  expect(
+    await screen.findByRole("dialog", { name: "Update ticket 1" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue(
+    printer.title,
+  );
+  expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+    printer.description,
+  );
+  expect(screen.getByRole("radio", { name: "open" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveAttribute(
+    "placeholder",
+    "Finish the update first.",
+  );
+  expect(screen.getByRole("button", { name: "Delete ticket 1" })).toBeDisabled();
+
+  await userEvent.click(screen.getByRole("radio", { name: "closed" }));
+  await userEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+  expect(await screen.findByText("I can update that ticket.")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("article", { name: "You" })[1]).toHaveTextContent(
+    "Update ticket 1: set status to closed.",
+  );
+});
+
+it("cancels an update without sending a message", async () => {
+  render(
+    <TicketChat replyTransport={replyTransport(() => searchReply())} />,
+  );
+
+  await send("List the tickets");
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Update ticket 1" }),
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("article", { name: "You" })).toHaveLength(1);
+  expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveAttribute(
+    "placeholder",
+    "Message",
+  );
 });
 
 it("marks the transcript busy while a reply is streaming", async () => {
