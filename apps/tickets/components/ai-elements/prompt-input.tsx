@@ -185,6 +185,7 @@ export interface AttachmentsContext {
   clear: () => void;
   openFileDialog: () => void;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  acceptsFiles: boolean;
 }
 
 export interface TextInputContext {
@@ -325,6 +326,7 @@ export const PromptInputProvider = ({
 
   const attachments = useMemo<AttachmentsContext>(
     () => ({
+      acceptsFiles: true,
       add,
       clear,
       fileInputRef,
@@ -710,6 +712,7 @@ export const PromptInput = ({
     []
   );
 
+  const acceptsFiles = maxFiles !== 0;
   const add = usingProvider ? addWithProviderValidation : addLocal;
   const remove = usingProvider ? controller.attachments.remove : removeLocal;
   const openFileDialog = usingProvider
@@ -740,7 +743,7 @@ export const PromptInput = ({
   // Attach drop handlers on nearest form and document (opt-in)
   useEffect(() => {
     const form = formRef.current;
-    if (!form) {
+    if (!form || !acceptsFiles) {
       return;
     }
     if (globalDrop) {
@@ -767,10 +770,10 @@ export const PromptInput = ({
       form.removeEventListener("dragover", onDragOver);
       form.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [acceptsFiles, add, globalDrop]);
 
   useEffect(() => {
-    if (!globalDrop) {
+    if (!globalDrop || !acceptsFiles) {
       return;
     }
 
@@ -793,7 +796,7 @@ export const PromptInput = ({
       document.removeEventListener("dragover", onDragOver);
       document.removeEventListener("drop", onDrop);
     };
-  }, [add, globalDrop]);
+  }, [acceptsFiles, add, globalDrop]);
 
   useEffect(
     () => () => {
@@ -821,6 +824,7 @@ export const PromptInput = ({
 
   const attachmentsCtx = useMemo<AttachmentsContext>(
     () => ({
+      acceptsFiles,
       add,
       clear: clearAttachments,
       fileInputRef: inputRef,
@@ -828,7 +832,7 @@ export const PromptInput = ({
       openFileDialog,
       remove,
     }),
-    [files, add, remove, clearAttachments, openFileDialog]
+    [acceptsFiles, files, add, remove, clearAttachments, openFileDialog]
   );
 
   const refsCtx = useMemo<ReferencedSourcesContext>(
@@ -870,16 +874,16 @@ export const PromptInput = ({
       try {
         // Convert blob URLs to data URLs asynchronously
         const convertedFiles: FileUIPart[] = await Promise.all(
-          files.map(async ({ id: _id, ...item }) => {
-            if (item.url?.startsWith("blob:")) {
-              const dataUrl = await convertBlobUrlToDataUrl(item.url);
-              // If conversion failed, keep the original blob URL
-              return {
-                ...item,
-                url: dataUrl ?? item.url,
-              };
-            }
-            return item;
+          files.map(async (file) => {
+            const url = file.url?.startsWith("blob:")
+              ? ((await convertBlobUrlToDataUrl(file.url)) ?? file.url)
+              : file.url;
+            return {
+              filename: file.filename,
+              mediaType: file.mediaType,
+              type: file.type,
+              url,
+            };
           })
         );
 
@@ -913,16 +917,18 @@ export const PromptInput = ({
   // Render with or without local provider
   const inner = (
     <>
-      <input
-        accept={accept}
-        aria-label="Upload files"
-        className="hidden"
-        multiple={multiple}
-        onChange={handleChange}
-        ref={inputRef}
-        title="Upload files"
-        type="file"
-      />
+      {acceptsFiles ? (
+        <input
+          accept={accept}
+          aria-label="Upload files"
+          className="hidden"
+          multiple={multiple}
+          onChange={handleChange}
+          ref={inputRef}
+          title="Upload files"
+          type="file"
+        />
+      ) : null}
       <form
         className={cn("w-full", className)}
         onSubmit={handleSubmit}
@@ -1038,7 +1044,7 @@ export const PromptInputTextarea = ({
         }
       }
 
-      if (files.length > 0) {
+      if (files.length > 0 && attachments.acceptsFiles) {
         event.preventDefault();
         attachments.add(files);
       }

@@ -24,12 +24,6 @@ const eslintConfig = defineConfig([
   {
     files: ["apps/tickets/**/*.{js,jsx,mjs,ts,tsx}"],
     extends: [...nextVitals, ...nextTs],
-    rules: {
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
-      ],
-    },
   },
 ]);
 

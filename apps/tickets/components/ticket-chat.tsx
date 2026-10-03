@@ -111,12 +111,9 @@ export function TicketChat({
           </div>
         </div>
         {resetError ? (
-          <p
-            role="alert"
-            className="mx-auto w-full max-w-3xl px-4 pb-3 text-sm text-red-700 dark:text-red-400"
-          >
+          <ThreadAlert className="mx-auto w-full max-w-3xl px-4 pb-3">
             {resetError}
-          </p>
+          </ThreadAlert>
         ) : null}
       </header>
       <ChatSession
@@ -241,16 +238,8 @@ function ChatSession({
               decisions={decisions}
             />
           ))}
-          {error ? (
-            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-              {error.message}
-            </p>
-          ) : null}
-          {decisionError ? (
-            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-              {decisionError}
-            </p>
-          ) : null}
+          {error ? <ThreadAlert>{error.message}</ThreadAlert> : null}
+          {decisionError ? <ThreadAlert>{decisionError}</ThreadAlert> : null}
         </ConversationContent>
       </Conversation>
       <div className="border-t border-zinc-200 dark:border-zinc-800">
@@ -261,7 +250,6 @@ function ChatSession({
               value={draft}
               disabled={fieldLocked}
               onChange={(event) => setDraft(event.target.value)}
-              onPaste={() => undefined} // keep pasted text; do not store files
               placeholder={
                 proposal ? "Decide the pending change first." : "Message"
               }
@@ -336,11 +324,30 @@ type TicketCardModel = {
   status: "open" | "closed";
 };
 
-function messageText(message: ChatMessage): string {
+export function messageText(message: {
+  parts: readonly { type: string; text?: string }[];
+}): string {
   return message.parts
     .filter((part) => part.type === "text")
-    .map((part) => part.text)
+    .map((part) => part.text ?? "")
     .join("");
+}
+
+function ThreadAlert({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
+  return (
+    <p
+      role="alert"
+      className={`text-sm text-red-700 dark:text-red-400 ${className ?? ""}`}
+    >
+      {children}
+    </p>
+  );
 }
 
 function readTicket(value: unknown): TicketCardModel | null {

@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UIMessageChunk } from "ai";
 import { afterEach, expect, it, vi } from "vitest";
-import { TicketChat } from "@/components/ticket-chat";
+import { messageText, TicketChat } from "@/components/ticket-chat";
 
 const printer = {
   id: "1",
@@ -46,8 +46,10 @@ function assistantReply(options: {
   return chunks;
 }
 
-function replyTransport(
-  respond: (text: string) => UIMessageChunk[] | Promise<UIMessageChunk[]>,
+function chatTransport(
+  open: (
+    text: string,
+  ) => ReadableStream<UIMessageChunk> | Promise<ReadableStream<UIMessageChunk>>,
 ) {
   return {
     async sendMessages({
@@ -55,19 +57,7 @@ function replyTransport(
     }: {
       messages: { parts: { type: string; text?: string }[] }[];
     }) {
-      const last = messages.at(-1);
-      const text =
-        last?.parts
-          .filter((part) => part.type === "text")
-          .map((part) => part.text ?? "")
-          .join("") ?? "";
-      const chunks = await respond(text);
-      return new ReadableStream<UIMessageChunk>({
-        start(controller) {
-          for (const chunk of chunks) controller.enqueue(chunk);
-          controller.close();
-        },
-      });
+      return open(messageText(messages.at(-1) ?? { parts: [] }));
     },
     async reconnectToStream() {
       return null;
@@ -75,31 +65,41 @@ function replyTransport(
   };
 }
 
+function streamChunks(
+  write: (enqueue: (chunk: UIMessageChunk) => void) => void | Promise<void>,
+) {
+  return new ReadableStream<UIMessageChunk>({
+    async start(controller) {
+      await write((chunk) => controller.enqueue(chunk));
+      controller.close();
+    },
+  });
+}
+
+function replyTransport(
+  respond: (text: string) => UIMessageChunk[] | Promise<UIMessageChunk[]>,
+) {
+  return chatTransport(async (text) => {
+    const chunks = await respond(text);
+    return streamChunks((enqueue) => {
+      for (const chunk of chunks) enqueue(chunk);
+    });
+  });
+}
+
 function heldReply(text: string) {
   let release = () => {};
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  const transport = {
-    async sendMessages() {
-      return new ReadableStream<UIMessageChunk>({
-        async start(controller) {
-          controller.enqueue({ type: "start" });
-          controller.enqueue({ type: "start-step" });
-          controller.enqueue({ type: "text-start", id: "text" });
-          controller.enqueue({ type: "text-delta", id: "text", delta: text });
-          await gate;
-          controller.enqueue({ type: "text-end", id: "text" });
-          controller.enqueue({ type: "finish-step" });
-          controller.enqueue({ type: "finish" });
-          controller.close();
-        },
-      });
-    },
-    async reconnectToStream() {
-      return null;
-    },
-  };
+  const transport = chatTransport(() =>
+    streamChunks(async (enqueue) => {
+      for (const chunk of assistantReply({ text })) {
+        if (chunk.type === "text-end") await gate;
+        enqueue(chunk);
+      }
+    }),
+  );
   return { transport, release: () => release() };
 }
 
