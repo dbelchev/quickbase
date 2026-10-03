@@ -2,7 +2,13 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type ChatTransport, type UIMessage } from "ai";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import {
   Conversation,
   ConversationContent,
@@ -12,17 +18,17 @@ import {
   MessageContent,
 } from "@/components/ai-elements/message";
 import {
-  PromptInput,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-} from "@/components/ai-elements/prompt-input";
-import {
   ApprovalModal,
   type PendingProposal,
 } from "@/components/approval-modal";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
 
 type TenantId = "tenant-a" | "tenant-b";
 
@@ -244,32 +250,82 @@ function ChatSession({
       </Conversation>
       <div className="border-t border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
-          <PromptInput maxFiles={0} onSubmit={submitMessage}>
-            <PromptInputTextarea
-              aria-label="Message"
-              value={draft}
-              disabled={fieldLocked}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={
-                proposal ? "Decide the pending change first." : "Message"
-              }
-            />
-            <PromptInputFooter className="justify-end">
-              <PromptInputSubmit
-                aria-label="Send"
-                disabled={fieldLocked || draft.trim() === ""}
-                size="sm"
-              >
-                Send
-              </PromptInputSubmit>
-            </PromptInputFooter>
-          </PromptInput>
+          <ThreadComposer
+            draft={draft}
+            locked={fieldLocked}
+            pending={proposal !== null}
+            onDraftChange={setDraft}
+            onSubmit={(text) => void submitMessage({ text })}
+          />
         </div>
       </div>
       {proposal ? (
         <ApprovalModal proposal={proposal} onDecide={decide} />
       ) : null}
     </>
+  );
+}
+
+function ThreadComposer({
+  draft,
+  locked,
+  pending,
+  onDraftChange,
+  onSubmit,
+}: {
+  draft: string;
+  locked: boolean;
+  pending: boolean;
+  onDraftChange: (draft: string) => void;
+  onSubmit: (text: string) => void;
+}) {
+  const [composing, setComposing] = useState(false);
+
+  function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    if (composing || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    const submitButton = event.currentTarget.form?.querySelector(
+      'button[type="submit"]',
+    );
+    if (!(submitButton instanceof HTMLButtonElement) || submitButton.disabled) {
+      return;
+    }
+    event.currentTarget.form?.requestSubmit();
+  }
+
+  return (
+    <form
+      className="w-full"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(draft);
+      }}
+    >
+      <InputGroup>
+        <InputGroupTextarea
+          aria-label="Message"
+          disabled={locked}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onCompositionEnd={() => setComposing(false)}
+          onCompositionStart={() => setComposing(true)}
+          onKeyDown={onKeyDown}
+          placeholder={pending ? "Decide the pending change first." : "Message"}
+          value={draft}
+        />
+        <InputGroupAddon align="block-end" className="justify-end">
+          <InputGroupButton
+            aria-label="Send"
+            disabled={locked || draft.trim() === ""}
+            size="sm"
+            type="submit"
+            variant="default"
+          >
+            Send
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </form>
   );
 }
 
