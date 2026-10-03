@@ -1,12 +1,28 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, type ChatTransport, type UIMessage } from "ai";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Conversation,
+  ConversationContent,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageContent,
+} from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
 import {
   ApprovalModal,
   type PendingProposal,
 } from "@/components/approval-modal";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 type TenantId = "tenant-a" | "tenant-b";
 
@@ -19,7 +35,11 @@ const tenants: { id: TenantId; label: string }[] = [
 
 const pendingConfirmations = new Map<string, string>();
 
-export function TicketChat() {
+export function TicketChat({
+  replyTransport,
+}: {
+  replyTransport?: ChatTransport<ChatMessage>;
+} = {}) {
   const [tenantId, setTenantId] = useState<TenantId>("tenant-a");
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [sessionBusy, setSessionBusy] = useState(false);
@@ -103,6 +123,7 @@ export function TicketChat() {
         key={threadId}
         tenantId={tenantId}
         threadId={threadId}
+        replyTransport={replyTransport}
         onBusyChange={reportSessionBusy}
       />
     </div>
@@ -112,10 +133,12 @@ export function TicketChat() {
 function ChatSession({
   tenantId,
   threadId,
+  replyTransport,
   onBusyChange,
 }: {
   tenantId: TenantId;
   threadId: string;
+  replyTransport?: ChatTransport<ChatMessage>;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [decisions, setDecisions] = useState<
@@ -127,6 +150,7 @@ function ChatSession({
 
   const transport = useMemo(
     () =>
+      replyTransport ??
       new DefaultChatTransport<ChatMessage>({
         api: "/api/chat",
         prepareSendMessagesRequest: ({ messages, body, api }) => ({
@@ -140,7 +164,7 @@ function ChatSession({
           },
         }),
       }),
-    [tenantId, threadId],
+    [replyTransport, tenantId, threadId],
   );
 
   const { messages, sendMessage, status, error } = useChat<ChatMessage>({
@@ -191,73 +215,69 @@ function ChatSession({
     }
   }
 
-  async function submitMessage(event: React.FormEvent) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text || busy || proposal) return;
+  const fieldLocked = busy || proposal !== null;
+
+  async function submitMessage({ text }: { text: string }) {
+    const trimmed = text.trim();
+    if (!trimmed || fieldLocked) return;
     setDraft("");
-    await sendMessage({ text });
+    await sendMessage({ text: trimmed });
   }
 
   return (
     <>
-      <main className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-4 overflow-y-auto px-4 py-6">
-        {messages.length === 0 ? (
-          <p className="text-sm text-zinc-500">
-            Ask about this tenant&apos;s tickets. Deletes and updates wait for
-            approval.
-          </p>
-        ) : null}
-        <ol className="flex flex-col gap-4" aria-live="polite">
+      <Conversation className="mx-auto min-h-0 w-full max-w-3xl flex-1">
+        <ConversationContent>
+          {messages.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Ask about this tenant&apos;s tickets. Deletes and updates wait for
+              approval.
+            </p>
+          ) : null}
           {messages.map((message) => (
-            <MessageRow key={message.id} message={message} decisions={decisions} />
+            <ThreadMessage
+              key={message.id}
+              message={message}
+              decisions={decisions}
+            />
           ))}
-        </ol>
-        {error ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {error.message}
-          </p>
-        ) : null}
-        {decisionError ? (
-          <p role="alert" className="text-sm text-red-700 dark:text-red-400">
-            {decisionError}
-          </p>
-        ) : null}
-      </main>
-      <form
-        onSubmit={submitMessage}
-        className="border-t border-zinc-200 dark:border-zinc-800"
-      >
-        <div className="mx-auto flex w-full max-w-3xl gap-2 px-4 py-3">
-          <label className="sr-only" htmlFor="chat-message">
-            Message
-          </label>
-          <textarea
-            id="chat-message"
-            value={draft}
-            rows={2}
-            disabled={busy || proposal !== null}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                event.currentTarget.form?.requestSubmit();
+          {error ? (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+              {error.message}
+            </p>
+          ) : null}
+          {decisionError ? (
+            <p role="alert" className="text-sm text-red-700 dark:text-red-400">
+              {decisionError}
+            </p>
+          ) : null}
+        </ConversationContent>
+      </Conversation>
+      <div className="border-t border-zinc-200 dark:border-zinc-800">
+        <div className="mx-auto w-full max-w-3xl px-4 py-3">
+          <PromptInput maxFiles={0} onSubmit={submitMessage}>
+            <PromptInputTextarea
+              aria-label="Message"
+              value={draft}
+              disabled={fieldLocked}
+              onChange={(event) => setDraft(event.target.value)}
+              onPaste={() => undefined} // keep pasted text; do not store files
+              placeholder={
+                proposal ? "Decide the pending change first." : "Message"
               }
-            }}
-            placeholder={
-              proposal ? "Decide the pending change first." : "Message"
-            }
-            className="min-h-12 flex-1 resize-none rounded-md border border-zinc-300 bg-transparent px-3 py-2 text-sm disabled:opacity-60 dark:border-zinc-700"
-          />
-          <button
-            type="submit"
-            disabled={busy || proposal !== null || draft.trim() === ""}
-            className="self-end rounded-md bg-zinc-950 px-3 py-2 text-sm text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-950"
-          >
-            Send
-          </button>
+            />
+            <PromptInputFooter className="justify-end">
+              <PromptInputSubmit
+                aria-label="Send"
+                disabled={fieldLocked || draft.trim() === ""}
+                size="sm"
+              >
+                Send
+              </PromptInputSubmit>
+            </PromptInputFooter>
+          </PromptInput>
         </div>
-      </form>
+      </div>
       {proposal ? (
         <ApprovalModal proposal={proposal} onDecide={decide} />
       ) : null}
@@ -265,7 +285,7 @@ function ChatSession({
   );
 }
 
-function MessageRow({
+function ThreadMessage({
   message,
   decisions,
 }: {
@@ -274,32 +294,75 @@ function MessageRow({
 }) {
   if (message.role === "user" && message.metadata?.confirmation) return null;
 
-  const text = message.parts
-    .filter((part) => part.type === "text")
-    .map((part) => ("text" in part ? part.text : ""))
-    .join("");
+  const text = messageText(message);
   const tools = message.parts.filter((part) => part.type.startsWith("tool-"));
-
   if (!text && tools.length === 0) return null;
 
+  const fromPerson = message.role === "user";
+
   return (
-    <li className="flex flex-col gap-2">
-      <p className="text-xs uppercase tracking-wide text-zinc-500">
-        {message.role === "user" ? "You" : "Assistant"}
-      </p>
-      {text ? <p className="whitespace-pre-wrap text-sm">{text}</p> : null}
+    <Message
+      from={fromPerson ? "user" : "assistant"}
+      role="article"
+      aria-label={fromPerson ? "You" : "Tickets chat agent"}
+      className={fromPerson ? undefined : "w-full max-w-none"}
+    >
+      {text ? (
+        <MessageContent
+          className={
+            fromPerson
+              ? "whitespace-pre-wrap"
+              : "w-fit whitespace-pre-wrap rounded-lg bg-muted px-4 py-3"
+          }
+        >
+          {text}
+        </MessageContent>
+      ) : null}
       {tools.map((part, index) => (
-        <ToolTrace
+        <ToolRecord
           key={"toolCallId" in part ? part.toolCallId : `${part.type}-${index}`}
           part={part}
           decisions={decisions}
         />
       ))}
-    </li>
+    </Message>
   );
 }
 
-function ToolTrace({
+type TicketCardModel = {
+  id: string;
+  title: string;
+  description: string;
+  status: "open" | "closed";
+};
+
+function messageText(message: ChatMessage): string {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
+
+function readTicket(value: unknown): TicketCardModel | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.id !== "string" ||
+    typeof record.title !== "string" ||
+    typeof record.description !== "string" ||
+    (record.status !== "open" && record.status !== "closed")
+  ) {
+    return null;
+  }
+  return {
+    id: record.id,
+    title: record.title,
+    description: record.description,
+    status: record.status,
+  };
+}
+
+function ToolRecord({
   part,
   decisions,
 }: {
@@ -312,7 +375,7 @@ function ToolTrace({
   const outcome = outcomeLabel(output, decisions);
 
   return (
-    <div className="rounded-md border border-zinc-200 p-3 text-sm dark:border-zinc-800">
+    <div className="flex w-full min-w-0 flex-col gap-2 text-sm">
       <div className="flex items-center justify-between gap-3">
         <p className="font-medium">{name}</p>
         {outcome ? (
@@ -321,38 +384,36 @@ function ToolTrace({
           </p>
         ) : null}
       </div>
-      <pre className="mt-2 overflow-x-auto text-xs text-zinc-700 dark:text-zinc-300">
+      <pre className="overflow-x-auto text-xs text-muted-foreground">
         {JSON.stringify(input ?? {}, null, 2)}
       </pre>
       {name === "search_tickets" && Array.isArray(output) ? (
-        <ul className="mt-2 space-y-2">
-          {output.map((hit) => (
-            <SearchHit key={String(hit.id)} hit={hit} />
-          ))}
-        </ul>
+        <div className="flex flex-col gap-2">
+          {output.map((hit, index) => {
+            const ticket = readTicket(hit);
+            if (!ticket) return null;
+            return <TicketCard key={`${ticket.id}-${index}`} ticket={ticket} />;
+          })}
+        </div>
       ) : null}
     </div>
   );
 }
 
-function SearchHit({ hit }: { hit: unknown }) {
-  if (!hit || typeof hit !== "object") return null;
-  const ticket = hit as {
-    id?: string;
-    title?: string;
-    description?: string;
-    status?: string;
-  };
+function TicketCard({ ticket }: { ticket: TicketCardModel }) {
   return (
-    <li className="rounded border border-zinc-100 p-2 dark:border-zinc-900">
-      <p className="font-medium">
-        {ticket.id}: {ticket.title}
-      </p>
-      <p className="whitespace-pre-wrap text-zinc-700 dark:text-zinc-300">
-        {ticket.description}
-      </p>
-      <p className="text-xs text-zinc-500">{ticket.status}</p>
-    </li>
+    <Card className="w-full min-w-0">
+      <CardContent className="flex min-w-0 items-center gap-3">
+        <Badge variant={ticket.status === "closed" ? "secondary" : "default"}>
+          {ticket.status}
+        </Badge>
+        <span className="shrink-0 whitespace-nowrap">{ticket.id}</span>
+        <span className="min-w-0 shrink truncate font-medium">{ticket.title}</span>
+        <span className="min-w-0 flex-[1_2_0%] truncate text-muted-foreground">
+          {ticket.description}
+        </span>
+      </CardContent>
+    </Card>
   );
 }
 
