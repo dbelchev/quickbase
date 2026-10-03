@@ -10,19 +10,21 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
-  Conversation,
-  ConversationContent,
-} from "@/components/ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-} from "@/components/ai-elements/message";
-import {
   ApprovalModal,
   type PendingProposal,
 } from "@/components/approval-modal";
 import { Badge } from "@/components/ui/badge";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
+import { Message, MessageContent } from "@/components/ui/message";
 import {
   InputGroup,
   InputGroupAddon,
@@ -116,18 +118,14 @@ export function TicketChat({
             </div>
           </div>
         </div>
-        {resetError ? (
-          <ThreadAlert className="mx-auto w-full max-w-3xl px-4 pb-3">
-            {resetError}
-          </ThreadAlert>
-        ) : null}
       </header>
       <ChatSession
         key={threadId}
+        onBusyChange={reportSessionBusy}
+        replyTransport={replyTransport}
+        resetError={resetError}
         tenantId={tenantId}
         threadId={threadId}
-        replyTransport={replyTransport}
-        onBusyChange={reportSessionBusy}
       />
     </div>
   );
@@ -137,11 +135,13 @@ function ChatSession({
   tenantId,
   threadId,
   replyTransport,
+  resetError,
   onBusyChange,
 }: {
   tenantId: TenantId;
   threadId: string;
   replyTransport?: ChatTransport<ChatMessage>;
+  resetError: string | null;
   onBusyChange: (busy: boolean) => void;
 }) {
   const [decisions, setDecisions] = useState<
@@ -227,27 +227,54 @@ function ChatSession({
     await sendMessage({ text: trimmed });
   }
 
+  const turns = messages.filter(isVisibleTurn);
+
   return (
     <>
-      <Conversation className="mx-auto min-h-0 w-full max-w-3xl flex-1">
-        <ConversationContent>
-          {messages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Ask about this tenant&apos;s tickets. Deletes and updates wait for
-              approval.
-            </p>
-          ) : null}
-          {messages.map((message) => (
-            <ThreadMessage
-              key={message.id}
-              message={message}
-              decisions={decisions}
-            />
-          ))}
-          {error ? <ThreadAlert>{error.message}</ThreadAlert> : null}
-          {decisionError ? <ThreadAlert>{decisionError}</ThreadAlert> : null}
-        </ConversationContent>
-      </Conversation>
+      <MessageScrollerProvider autoScroll>
+        <MessageScroller className="mx-auto min-h-0 w-full max-w-3xl flex-1">
+          <MessageScrollerViewport>
+            <MessageScrollerContent
+              aria-busy={status === "streaming"}
+              className="p-4"
+            >
+              {messages.length === 0 ? (
+                <MessageScrollerItem messageId="empty-thread">
+                  <p className="text-sm text-muted-foreground">
+                    Ask about this tenant&apos;s tickets. Deletes and updates
+                    wait for approval.
+                  </p>
+                </MessageScrollerItem>
+              ) : null}
+              {turns.map((message) => (
+                <MessageScrollerItem
+                  key={message.id}
+                  messageId={message.id}
+                  scrollAnchor={message.role === "user"}
+                >
+                  <ThreadMessage decisions={decisions} message={message} />
+                </MessageScrollerItem>
+              ))}
+              {error ? (
+                <MessageScrollerItem messageId="reply-error">
+                  <ThreadAlert>{error.message}</ThreadAlert>
+                </MessageScrollerItem>
+              ) : null}
+              {decisionError ? (
+                <MessageScrollerItem messageId="decision-error">
+                  <ThreadAlert>{decisionError}</ThreadAlert>
+                </MessageScrollerItem>
+              ) : null}
+              {resetError ? (
+                <MessageScrollerItem messageId="reset-error">
+                  <ThreadAlert>{resetError}</ThreadAlert>
+                </MessageScrollerItem>
+              ) : null}
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          <MessageScrollerButton />
+        </MessageScroller>
+      </MessageScrollerProvider>
       <div className="border-t border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto w-full max-w-3xl px-4 py-3">
           <ThreadComposer
@@ -336,41 +363,43 @@ function ThreadMessage({
   message: ChatMessage;
   decisions: Record<string, "applied" | "rejected">;
 }) {
-  if (message.role === "user" && message.metadata?.confirmation) return null;
-
   const text = messageText(message);
   const tools = message.parts.filter((part) => part.type.startsWith("tool-"));
-  if (!text && tools.length === 0) return null;
-
   const fromPerson = message.role === "user";
 
   return (
     <Message
-      from={fromPerson ? "user" : "assistant"}
-      role="article"
+      align={fromPerson ? "end" : "start"}
       aria-label={fromPerson ? "You" : "Tickets chat agent"}
-      className={fromPerson ? undefined : "w-full max-w-none"}
+      role="article"
     >
-      {text ? (
-        <MessageContent
-          className={
-            fromPerson
-              ? "whitespace-pre-wrap"
-              : "w-fit whitespace-pre-wrap rounded-lg bg-muted px-4 py-3"
-          }
-        >
-          {text}
-        </MessageContent>
-      ) : null}
-      {tools.map((part, index) => (
-        <ToolRecord
-          key={"toolCallId" in part ? part.toolCallId : `${part.type}-${index}`}
-          part={part}
-          decisions={decisions}
-        />
-      ))}
+      <MessageContent>
+        {text ? (
+          <Bubble
+            align={fromPerson ? "end" : "start"}
+            variant={fromPerson ? "secondary" : "ghost"}
+          >
+            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+          </Bubble>
+        ) : null}
+        {tools.map((part, index) => (
+          <ToolRecord
+            key={
+              "toolCallId" in part ? part.toolCallId : `${part.type}-${index}`
+            }
+            decisions={decisions}
+            part={part}
+          />
+        ))}
+      </MessageContent>
     </Message>
   );
+}
+
+function isVisibleTurn(message: ChatMessage) {
+  if (message.role === "user" && message.metadata?.confirmation) return false;
+  if (messageText(message)) return true;
+  return message.parts.some((part) => part.type.startsWith("tool-"));
 }
 
 type TicketCardModel = {
@@ -389,18 +418,9 @@ export function messageText(message: {
     .join("");
 }
 
-function ThreadAlert({
-  children,
-  className,
-}: {
-  children: string;
-  className?: string;
-}) {
+function ThreadAlert({ children }: { children: string }) {
   return (
-    <p
-      role="alert"
-      className={`text-sm text-red-700 dark:text-red-400 ${className ?? ""}`}
-    >
+    <p role="alert" className="text-sm text-red-700 dark:text-red-400">
       {children}
     </p>
   );

@@ -181,6 +181,35 @@ it("lists each ticket as status, id, title, and description", async () => {
   expect(screen.getByText(chairs.title).closest("a, button")).toBeNull();
 });
 
+it("marks the transcript busy while a reply is streaming", async () => {
+  const held = heldReply("Still writing");
+  render(<TicketChat replyTransport={held.transport} />);
+
+  expect(screen.getByRole("log")).not.toHaveAttribute("aria-busy", "true");
+
+  await send("Say something");
+
+  expect(await screen.findByText("Still writing")).toBeInTheDocument();
+  expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "true");
+  held.release();
+});
+
+it("keeps the jump control inactive at the live edge", () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({ text: "Hello." }),
+      )}
+    />,
+  );
+
+  const jump = screen.getByRole("button", {
+    name: "Scroll to end",
+    hidden: true,
+  });
+  expect(jump).toHaveAttribute("inert");
+});
+
 it("names the person and the tickets chat agent without visible speaker labels", async () => {
   render(
     <TicketChat
