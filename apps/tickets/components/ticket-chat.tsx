@@ -16,6 +16,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Card, CardContent } from "@/components/ui/card";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import { Spinner } from "@/components/ui/spinner";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -456,17 +458,26 @@ function ToolRecord({
   const input = "input" in part ? part.input : undefined;
   const output = "output" in part ? part.output : undefined;
   const outcome = outcomeLabel(output, decisions);
+  const running = outcome === "…";
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 text-sm">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-medium">{name}</p>
-        {outcome ? (
-          <p>
-            Outcome: <span className="font-medium">{outcome}</span>
-          </p>
+      <Marker role={running ? "status" : undefined} variant="default">
+        {running ? (
+          <MarkerIcon>
+            <Spinner />
+          </MarkerIcon>
         ) : null}
-      </div>
+        <MarkerContent className={running ? "shimmer" : undefined}>
+          <span className="font-medium">{name}</span>
+          {outcome ? (
+            <>
+              {" "}
+              Outcome: <span className="font-medium">{outcome}</span>
+            </>
+          ) : null}
+        </MarkerContent>
+      </Marker>
       <pre className="overflow-x-auto text-xs text-muted-foreground">
         {JSON.stringify(input ?? {}, null, 2)}
       </pre>

@@ -194,6 +194,49 @@ it("marks the transcript busy while a reply is streaming", async () => {
   held.release();
 });
 
+it("announces a tool that is still running as a status", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  render(
+    <TicketChat
+      replyTransport={chatTransport(() =>
+        streamChunks(async (enqueue) => {
+          enqueue({ type: "start" });
+          enqueue({ type: "start-step" });
+          enqueue({
+            type: "tool-input-available",
+            toolCallId: "tool-0",
+            toolName: "search_tickets",
+            input: { query: "printer" },
+          });
+          await gate;
+          enqueue({
+            type: "tool-output-available",
+            toolCallId: "tool-0",
+            output: [printer],
+          });
+          enqueue({ type: "finish-step" });
+          enqueue({ type: "finish" });
+        }),
+      )}
+    />,
+  );
+
+  await send("Find the printer ticket");
+
+  const status = await screen.findByRole("status");
+  expect(status).toHaveTextContent("search_tickets");
+  expect(status).toHaveTextContent("Outcome:");
+  expect(status).toHaveTextContent("…");
+
+  release();
+
+  expect(await screen.findByText(printer.title)).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+});
+
 it("keeps the jump control inactive at the live edge", () => {
   render(
     <TicketChat
