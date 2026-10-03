@@ -2,6 +2,8 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type ChatTransport, type UIMessage } from "ai";
+import { cn } from "cn";
+import { ChevronDownIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -579,6 +581,11 @@ function ToolRecord({
   );
 }
 
+function firstLine(description: string) {
+  const breakAt = description.search(/\r?\n/);
+  return breakAt === -1 ? description : description.slice(0, breakAt);
+}
+
 function TicketCard({
   ticket,
   locked,
@@ -590,6 +597,9 @@ function TicketCard({
   onDelete: () => void;
   onUpdate: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const description = expanded ? ticket.description : firstLine(ticket.description);
+
   return (
     <Card className="w-full min-w-0">
       <CardContent className="flex min-w-0 flex-col gap-2">
@@ -601,8 +611,8 @@ function TicketCard({
             {ticket.status}
           </Badge>
           <span className="shrink-0 whitespace-nowrap">{ticket.id}</span>
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {ticket.description}
+          <span className="min-w-0 flex-1 truncate font-medium">
+            {ticket.title}
           </span>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <Button
@@ -627,7 +637,31 @@ function TicketCard({
             </Button>
           </div>
         </div>
-        <span className="min-w-0 truncate font-medium">{ticket.title}</span>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          className={cn(
+            "flex w-full min-w-0 cursor-pointer gap-2 bg-transparent p-0 text-left text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            expanded ? "items-start" : "items-center",
+          )}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <span
+            className={cn(
+              "min-w-0 flex-1",
+              expanded ? "whitespace-pre-wrap" : "truncate",
+            )}
+          >
+            {description}
+          </span>
+          <ChevronDownIcon
+            aria-hidden
+            className={cn(
+              "size-3.5 shrink-0 transition-transform",
+              expanded && "rotate-180",
+            )}
+          />
+        </button>
       </CardContent>
     </Card>
   );

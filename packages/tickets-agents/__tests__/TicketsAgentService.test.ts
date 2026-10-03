@@ -29,7 +29,8 @@ const badge = {
 const vpn = {
   id: "2",
   title: "VPN access",
-  description: "New hire needs VPN.",
+  description:
+    "New hire needs VPN before Monday so they can reach the office network, the print server, and the shared drive from a laptop that has not been imaged yet.\nFacilities also needs a temporary badge and a desk on the third floor before orientation.",
   status: "open" as const,
 };
 
@@ -270,7 +271,7 @@ describe("tickets chat agent", () => {
       {
         id: "2",
         title: "a_b",
-        description: "New hire needs VPN.",
+        description: vpn.description,
         status: "open",
       },
       {
@@ -434,7 +435,7 @@ describe("tickets chat agent", () => {
         ticketId: "2",
         action: "update",
         title: "VPN access",
-        description: "New hire needs VPN.",
+        description: vpn.description,
         fields: {
           title: "VPN for contractors",
           description: "Contractors need VPN.",
@@ -477,7 +478,7 @@ describe("tickets chat agent", () => {
         ticketId: "2",
         action: "update",
         title: "VPN access",
-        description: "New hire needs VPN.",
+        description: vpn.description,
       },
     });
     if (pending.outcome !== "pending") {

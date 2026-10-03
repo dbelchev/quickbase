@@ -172,12 +172,12 @@ it("lists each ticket as status, id, title, and description", async () => {
   expect(agent).toHaveTextContent("Here are the tickets.");
   expect(open).toBeGreaterThanOrEqual(0);
   expect(open).toBeLessThan(printerId);
-  expect(printerId).toBeLessThan(printerDescription);
-  expect(printerDescription).toBeLessThan(printerTitle);
-  expect(printerTitle).toBeLessThan(closed);
+  expect(printerId).toBeLessThan(printerTitle);
+  expect(printerTitle).toBeLessThan(printerDescription);
+  expect(printerDescription).toBeLessThan(closed);
   expect(closed).toBeLessThan(chairsId);
-  expect(chairsId).toBeLessThan(chairsDescription);
-  expect(chairsDescription).toBeLessThan(chairsTitle);
+  expect(chairsId).toBeLessThan(chairsTitle);
+  expect(chairsTitle).toBeLessThan(chairsDescription);
   const printerTitleNode = screen.getByText(printer.title);
   const printerDescriptionNode = screen.getByText(printer.description);
   expect(printerTitleNode.closest("a, button")).toBeNull();
@@ -185,15 +185,63 @@ it("lists each ticket as status, id, title, and description", async () => {
   expect(printerTitleNode.parentElement).not.toBe(
     printerDescriptionNode.parentElement,
   );
-  expect(printerDescriptionNode.parentElement).toContainElement(
+  expect(printerTitleNode.parentElement).toContainElement(
     screen.getByRole("button", { name: "Update ticket 1" }),
   );
+  expect(
+    screen.getByRole("button", { name: new RegExp(printer.description) }),
+  ).toHaveAttribute("aria-expanded", "false");
   expect(
     screen.getByRole("button", { name: "Update ticket 1" }),
   ).toBeEnabled();
   expect(
     screen.getByRole("button", { name: "Delete ticket 48" }),
   ).toBeEnabled();
+});
+
+it("expands a ticket description past its first line", async () => {
+  const description = [
+    "Lobby printer is jammed and the display keeps asking for a paper path check before anyone can print badges.",
+    "The tray is overfilled, and facilities asked for a technician before the morning rush.",
+  ].join("\n");
+
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({
+          text: "Here are the tickets.",
+          tools: [
+            {
+              name: "search_tickets",
+              input: { query: "*" },
+              output: [{ ...printer, description }],
+            },
+          ],
+        }),
+      )}
+    />,
+  );
+
+  await send("List the tickets");
+
+  const firstLine = description.split("\n")[0] ?? "";
+  const toggle = screen.getByRole("button", { name: new RegExp(firstLine) });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByText(firstLine)).toBeVisible();
+  expect(screen.queryByText(/facilities asked/)).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Update ticket 1" })).toBeEnabled();
+
+  await userEvent.click(toggle);
+
+  expect(toggle).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText(/facilities asked for a technician/)).toBeVisible();
+  expect(screen.getByText(printer.title)).toBeVisible();
+
+  await userEvent.click(toggle);
+
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText(/facilities asked/)).not.toBeInTheDocument();
+  expect(screen.getByText(firstLine)).toBeVisible();
 });
 
 it("keeps the lead-in and hides the restated ticket list", async () => {

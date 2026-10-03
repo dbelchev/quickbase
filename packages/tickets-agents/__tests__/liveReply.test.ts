@@ -12,7 +12,8 @@ const openTickets = [
   {
     id: "2",
     title: "VPN access",
-    description: "New hire needs VPN.",
+    description:
+      "New hire needs VPN before Monday so they can reach the office network, the print server, and the shared drive from a laptop that has not been imaged yet.\nFacilities also needs a temporary badge and a desk on the third floor before orientation.",
     status: "open",
   },
   {
