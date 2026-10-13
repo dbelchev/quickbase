@@ -64,7 +64,7 @@ src/createServices.ts builds the three from an injected database
 
 The chat UI is a Next.js app. Each message is `POST /api/chat` with an `X-Tenant-ID` header. Next.js rewrites `/api/*` to the Fastify server. The server checks the tenant, binds the thread to that tenant, and calls the tickets chat agent.
 
-The agent runs Fireworks (`accounts/fireworks/models/deepseek-v4p1-flash`) through the Vercel AI SDK. It has two tools:
+The agent runs Fireworks (`accounts/fireworks/models/gpt-oss-120b`) through the Vercel AI SDK. It has two tools:
 
 - `search_tickets` reads the current tenant's tickets.
 - `mutate_ticket` records a proposal. The ticket row stays as it is.

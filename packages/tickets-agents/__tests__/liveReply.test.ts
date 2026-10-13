@@ -72,7 +72,7 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
   expect(
     modelIds.every(
       (modelId) =>
-        modelId === "accounts/fireworks/models/deepseek-v4p1-flash",
+        modelId === "accounts/fireworks/models/gpt-oss-120b",
     ),
   ).toBe(true);
 

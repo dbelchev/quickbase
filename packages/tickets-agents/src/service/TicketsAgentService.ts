@@ -24,7 +24,7 @@ import type { ProposalService } from "./ProposalService";
 import type { ThreadService } from "./ThreadService";
 
 const ticketsChatModelId =
-  "accounts/fireworks/models/deepseek-v4p1-flash" satisfies FireworksModelId;
+  "accounts/fireworks/models/gpt-oss-120b" satisfies FireworksModelId;
 
 export class TicketsAgentService {
   constructor(

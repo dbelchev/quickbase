@@ -18,7 +18,7 @@ export type FireworksModelConfig = Omit<
 };
 
 export const fireworksModelIds = [
-  "accounts/fireworks/models/deepseek-v4p1-flash",
+  "accounts/fireworks/models/gpt-oss-120b",
 ] as const;
 
 export const fireworksModelIdSchema = z.enum(fireworksModelIds);

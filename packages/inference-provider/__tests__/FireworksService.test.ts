@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { describe, expect, it, vi } from "vitest";
 import { FireworksService, type FireworksModelId } from "../src";
 
-const deepseekV4p1Flash = "accounts/fireworks/models/deepseek-v4p1-flash";
+const gptOss120b = "accounts/fireworks/models/gpt-oss-120b";
 
 describe("FireworksService", () => {
   it("rejects an unknown model id before resolving a model", () => {
@@ -18,11 +18,11 @@ describe("FireworksService", () => {
   });
 
   it("accepts call settings and Fireworks provider options", () => {
-    const model = new MockLanguageModelV4({ modelId: deepseekV4p1Flash });
+    const model = new MockLanguageModelV4({ modelId: gptOss120b });
     const fireworks = new FireworksService(() => model);
-    const bare = fireworks.languageModel(deepseekV4p1Flash);
+    const bare = fireworks.languageModel(gptOss120b);
 
-    const configured = fireworks.languageModel(deepseekV4p1Flash, {
+    const configured = fireworks.languageModel(gptOss120b, {
       temperature: 0.2,
       maxOutputTokens: 256,
       providerOptions: {
@@ -34,7 +34,7 @@ describe("FireworksService", () => {
     });
 
     expect(bare).toBe(model);
-    expect(configured.modelId).toBe(deepseekV4p1Flash);
+    expect(configured.modelId).toBe(gptOss120b);
     expect(configured).not.toBe(bare);
   });
 });

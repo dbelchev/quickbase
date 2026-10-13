@@ -12,7 +12,7 @@ import {
 
 const GEMINI_KEY = "GEMINI_TEST_API_KEY";
 const FIREWORKS_KEY = "FIREWORKS_TEST_API_KEY";
-const ticketsChatModelId = "accounts/fireworks/models/deepseek-v4p1-flash";
+const ticketsChatModelId = "accounts/fireworks/models/gpt-oss-120b";
 
 const tenantBText = [
   "Acme layoff plan",
