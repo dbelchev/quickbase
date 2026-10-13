@@ -714,7 +714,7 @@ it("shows an alert when a reply, decision, or reset fails", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
+      const url = input instanceof Request ? input.url : String(input);
       if (url.includes("/api/decisions") || url.includes("/api/reset")) {
         return new Response(null, { status: 500 });
       }

@@ -40,8 +40,13 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@/components/ui/input-group";
-
-type TenantId = "tenant-a" | "tenant-b";
+import {
+  ticketsApi,
+  type ChatRequest,
+  type Decision,
+  type DecisionOutcome,
+  type TenantId,
+} from "@/lib/tickets-client";
 
 type ChatMessage = UIMessage<{ confirmation?: boolean }>;
 
@@ -77,7 +82,7 @@ export function TicketChat({
     setResetting(true);
     setResetError(null);
     try {
-      const response = await fetch("/api/reset", { method: "POST" });
+      const { response } = await ticketsApi.POST("/api/reset");
       if (!response.ok) {
         setResetError("Storage was not reset.");
         return;
@@ -154,7 +159,7 @@ function ChatSession({
   onBusyChange: (busy: boolean) => void;
 }) {
   const [decisions, setDecisions] = useState<
-    Record<string, "applied" | "rejected">
+    Record<string, DecisionOutcome>
   >({});
   const [draft, setDraft] = useState("");
   const [editing, setEditing] = useState<UpdateTicket | null>(null);
@@ -166,16 +171,21 @@ function ChatSession({
       replyTransport ??
       new DefaultChatTransport<ChatMessage>({
         api: "/api/chat",
-        prepareSendMessagesRequest: ({ messages, body, api }) => ({
-          api,
-          headers: { "X-Tenant-ID": tenantId },
-          body: {
-            ...body,
-            threadId,
-            messages,
-            confirmationProposalId: pendingConfirmations.get(threadId),
-          },
-        }),
+        prepareSendMessagesRequest: ({ messages, body, api }) => {
+          const request: ChatRequest = {
+            headers: { "x-tenant-id": tenantId },
+            body: {
+              threadId,
+              messages,
+              confirmationProposalId: pendingConfirmations.get(threadId),
+            },
+          };
+          return {
+            api,
+            headers: request.headers,
+            body: { ...body, ...request.body },
+          };
+        },
       }),
     [replyTransport, tenantId, threadId],
   );
@@ -194,26 +204,23 @@ function ChatSession({
     return () => onBusyChange(false);
   }, [busy, onBusyChange]);
 
-  async function decide(decision: "approve" | "reject") {
+  async function decide(decision: Decision) {
     if (!proposal) return;
     setDeciding(true);
     setDecisionError(null);
     try {
-      const response = await fetch("/api/decisions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Tenant-ID": tenantId,
-        },
-        body: JSON.stringify({ proposalId: proposal.id, decision }),
+      const { data, response } = await ticketsApi.POST("/api/decisions", {
+        params: { header: { "x-tenant-id": tenantId } },
+        body: { proposalId: proposal.id, decision },
       });
-      if (!response.ok) {
+      if (!response.ok || !data) {
         setDecisionError("The decision was not recorded.");
         return;
       }
-      const body = (await response.json()) as { outcome?: string };
-      const outcome = body.outcome === "applied" ? "applied" : "rejected";
-      setDecisions((current) => ({ ...current, [proposal.id]: outcome }));
+      setDecisions((current) => ({
+        ...current,
+        [proposal.id]: data.outcome,
+      }));
       pendingConfirmations.set(threadId, proposal.id);
       try {
         await sendMessage({
@@ -417,7 +424,7 @@ function ThreadMessage({
   onUpdate,
 }: {
   message: ChatMessage;
-  decisions: Record<string, "applied" | "rejected">;
+  decisions: Record<string, DecisionOutcome>;
   locked: boolean;
   onDelete: (ticket: UpdateTicket) => void;
   onUpdate: (ticket: UpdateTicket) => void;
@@ -537,7 +544,7 @@ function ToolRecord({
   onUpdate,
 }: {
   part: ChatMessage["parts"][number];
-  decisions: Record<string, "applied" | "rejected">;
+  decisions: Record<string, DecisionOutcome>;
   locked: boolean;
   onDelete: (ticket: UpdateTicket) => void;
   onUpdate: (ticket: UpdateTicket) => void;
@@ -678,7 +685,7 @@ function TicketCard({
 
 function outcomeLabel(
   output: unknown,
-  decisions: Record<string, "applied" | "rejected">,
+  decisions: Record<string, DecisionOutcome>,
 ): string | null {
   if (Array.isArray(output)) return null;
   if (!output || typeof output !== "object") return "…";
@@ -697,7 +704,7 @@ function outcomeLabel(
 
 function firstPendingProposal(
   messages: ChatMessage[],
-  decisions: Record<string, "applied" | "rejected">,
+  decisions: Record<string, DecisionOutcome>,
 ): PendingProposal | null {
   for (const message of messages) {
     for (const part of message.parts) {

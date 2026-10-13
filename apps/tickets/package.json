@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "check-types": "tsc --noEmit",
+    "openapi": "openapi-typescript ../tickets-server/openapi.json -o lib/tickets-api.ts",
+    "check-types": "openapi-typescript ../tickets-server/openapi.json -o lib/tickets-api.ts --check && tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "lucide-react": "^1.49.0",
     "nanoid": "^6.0.1",
     "next": "16.2.4",
+    "openapi-fetch": "^0.17.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "shadcn": "^4.21.1",
@@ -38,6 +40,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "eslint": "catalog:",
     "jsdom": "^30.1.1",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "catalog:",
     "vitest": "catalog:"
