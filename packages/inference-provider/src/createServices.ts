@@ -1,7 +1,7 @@
 import { createProviderRegistry, type LanguageModel } from "ai";
 import { type FireworksModelId, type GeminiModelId } from "./model";
+import { createFireworksProvider } from "./service/FireworksService";
 import {
-  createFireworksProvider,
   createGeminiProvider,
   FireworksService,
   GeminiService,

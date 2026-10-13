@@ -1,8 +1,7 @@
 import { MockLanguageModelV4 } from "ai/test";
 import { ZodError } from "zod";
 import { describe, expect, it, vi } from "vitest";
-import { FireworksService } from "../src";
-import { type FireworksModelId } from "../src/model";
+import { FireworksService, type FireworksModelId } from "../src";
 
 const deepseekV4p1Flash = "accounts/fireworks/models/deepseek-v4p1-flash";
 
