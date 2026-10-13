@@ -314,21 +314,21 @@ describe("tickets server", () => {
   });
 });
 
-const ENV_KEY = "GEMINI_TEST_API_KEY";
+const GEMINI_KEY = "GEMINI_TEST_API_KEY";
+const FIREWORKS_KEY = "FIREWORKS_TEST_API_KEY";
 
 describe("tickets server startup", () => {
-  const original = process.env[ENV_KEY];
+  const originalGemini = process.env[GEMINI_KEY];
+  const originalFireworks = process.env[FIREWORKS_KEY];
 
   afterEach(() => {
-    if (original === undefined) {
-      delete process.env[ENV_KEY];
-    } else {
-      process.env[ENV_KEY] = original;
-    }
+    restore(GEMINI_KEY, originalGemini);
+    restore(FIREWORKS_KEY, originalFireworks);
   });
 
   it("fails at startup when GEMINI_TEST_API_KEY is missing", async () => {
-    delete process.env[ENV_KEY];
+    delete process.env[GEMINI_KEY];
+    process.env[FIREWORKS_KEY] = "test-key";
 
     await expect(
       start(async () => {
@@ -337,8 +337,20 @@ describe("tickets server startup", () => {
     ).rejects.toThrow(/GEMINI_TEST_API_KEY/);
   });
 
+  it("fails at startup when FIREWORKS_TEST_API_KEY is missing", async () => {
+    process.env[GEMINI_KEY] = "test-key";
+    delete process.env[FIREWORKS_KEY];
+
+    await expect(
+      start(async () => {
+        throw new Error("listened");
+      }),
+    ).rejects.toThrow(/FIREWORKS_TEST_API_KEY/);
+  });
+
   it("listens on port 3001", async () => {
-    process.env[ENV_KEY] = "test-key";
+    process.env[GEMINI_KEY] = "test-key";
+    process.env[FIREWORKS_KEY] = "test-key";
     let seen: number | undefined;
 
     await start(async (_app, options) => {
@@ -348,6 +360,14 @@ describe("tickets server startup", () => {
     expect(seen).toBe(3001);
   });
 });
+
+function restore(key: string, original: string | undefined) {
+  if (original === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = original;
+  }
+}
 
 function outcomeEnum(
   response:

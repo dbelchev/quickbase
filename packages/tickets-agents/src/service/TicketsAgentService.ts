@@ -1,4 +1,7 @@
-import { GeminiService, type GeminiModelId } from "@quickbase/inference-provider";
+import {
+  FireworksService,
+  type FireworksModelId,
+} from "@quickbase/inference-provider";
 import {
   isStepCount,
   streamText,
@@ -20,14 +23,15 @@ import type { TicketRepository } from "../repository";
 import type { ProposalService } from "./ProposalService";
 import type { ThreadService } from "./ThreadService";
 
-const ticketsChatModelId = "gemini-3.5-flash-lite" satisfies GeminiModelId;
+const ticketsChatModelId =
+  "accounts/fireworks/models/deepseek-v4p1-flash" satisfies FireworksModelId;
 
 export class TicketsAgentService {
   constructor(
     private readonly repository: TicketRepository,
     private readonly proposals: ProposalService,
     private readonly threads: ThreadService,
-    private readonly gemini: GeminiService,
+    private readonly fireworks: FireworksService,
   ) {}
 
   reset(): void {
@@ -89,7 +93,7 @@ export class TicketsAgentService {
     }
 
     const result = streamText({
-      model: this.gemini.languageModel(ticketsChatModelId),
+      model: this.fireworks.languageModel(ticketsChatModelId),
       instructions: instructions(input.confirmation),
       messages,
       tools: this.ticketTools(input.tenantId, canPropose),

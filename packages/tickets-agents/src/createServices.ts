@@ -4,7 +4,7 @@ import { TicketRepository } from "./repository";
 import { ProposalService, ThreadService, TicketsAgentService } from "./service";
 
 export function createServices(db: Database) {
-  const { gemini } = createInferenceServices();
+  const { fireworks } = createInferenceServices();
   const tickets = new TicketRepository(db);
   const proposals = new ProposalService(tickets);
   const threads = new ThreadService();
@@ -16,7 +16,7 @@ export function createServices(db: Database) {
       tickets,
       proposals,
       threads,
-      gemini,
+      fireworks,
     ),
   };
 }

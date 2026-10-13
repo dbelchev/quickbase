@@ -47,7 +47,7 @@ A pnpm workspace monorepo, orchestrated by Turborepo. Apps are the running proce
 apps/tickets                 Next.js client
 apps/tickets-server          Fastify API
 packages/tickets-agents      Tickets chat agent
-packages/inference-provider  Gemini model resolution
+packages/inference-provider  Gemini and Fireworks model resolution
 packages/database            SQLite connection and query helpers
 ```
 
@@ -64,7 +64,7 @@ src/createServices.ts builds the three from an injected database
 
 The chat UI is a Next.js app. Each message is `POST /api/chat` with an `X-Tenant-ID` header. Next.js rewrites `/api/*` to the Fastify server. The server checks the tenant, binds the thread to that tenant, and calls the tickets chat agent.
 
-The agent runs Gemini (`gemini-3.5-flash-lite`) through the Vercel AI SDK. It has two tools:
+The agent runs Fireworks (`accounts/fireworks/models/deepseek-v4p1-flash`) through the Vercel AI SDK. It has two tools:
 
 - `search_tickets` reads the current tenant's tickets.
 - `mutate_ticket` records a proposal. The ticket row stays as it is.
@@ -77,25 +77,25 @@ sequenceDiagram
   participant Client as Next.js client
   participant Server as Fastify server
   participant Agent as Tickets chat agent
-  participant Gemini
+  participant Fireworks
   participant Store as SQLite
 
   Person->>Client: Message
   Client->>Server: POST /api/chat, X-Tenant-ID
   Server->>Agent: Bind thread, reply
-  Agent->>Gemini: Stream a turn with tools
-  Gemini->>Agent: search_tickets
+  Agent->>Fireworks: Stream a turn with tools
+  Fireworks->>Agent: search_tickets
   Agent->>Store: Search this tenant
-  Store-->>Gemini: Tickets
-  Gemini->>Agent: mutate_ticket
+  Store-->>Fireworks: Tickets
+  Fireworks->>Agent: mutate_ticket
   Agent-->>Client: Pending proposal
   Client->>Person: Approve or reject
   Person->>Client: Decision
   Client->>Server: POST /api/decisions
   Server->>Store: Apply the write, or leave the row
   Client->>Server: POST /api/chat with the recorded proposal
-  Agent->>Gemini: State that outcome, no mutate tool
-  Gemini-->>Person: Confirmation
+  Agent->>Fireworks: State that outcome, no mutate tool
+  Fireworks-->>Person: Confirmation
 ```
 
 A turn stops after five steps, or as soon as a tool returns a pending proposal.

@@ -16,6 +16,10 @@ _Avoid_: LLM, checkpoint
 An inference provider.
 _Avoid_: Google service
 
+**Fireworks**:
+An inference provider.
+_Avoid_: Fireworks service
+
 **Chat agent**:
 A caller that runs a model. It is not an inference provider.
 _Avoid_: Bot, assistant

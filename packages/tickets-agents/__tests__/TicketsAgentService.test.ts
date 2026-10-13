@@ -1,5 +1,5 @@
 import { createServices as createDatabase } from "@quickbase/database";
-import { GeminiService } from "@quickbase/inference-provider";
+import { FireworksService } from "@quickbase/inference-provider";
 import { MockLanguageModelV4, simulateReadableStream } from "ai/test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -10,7 +10,9 @@ import {
   TicketsAgentService,
 } from "../src";
 
-const ENV_KEY = "GEMINI_TEST_API_KEY";
+const GEMINI_KEY = "GEMINI_TEST_API_KEY";
+const FIREWORKS_KEY = "FIREWORKS_TEST_API_KEY";
+const ticketsChatModelId = "accounts/fireworks/models/deepseek-v4p1-flash";
 
 const tenantBText = [
   "Acme layoff plan",
@@ -36,7 +38,7 @@ const vpn = {
 
 function textModel() {
   return new MockLanguageModelV4({
-    modelId: "gemini-3.5-flash-lite",
+    modelId: ticketsChatModelId,
     doStream: async () => ({
       stream: simulateReadableStream({
         chunks: [
@@ -75,7 +77,7 @@ function createAgent() {
     repository,
     proposals,
     threads,
-    new GeminiService(resolveModel),
+    new FireworksService(resolveModel),
   );
   return { agent, proposals, threads, repository, model, resolveModel };
 }
@@ -89,18 +91,17 @@ function userMessage(text: string, extraParts: Array<{ type: string }> = []) {
 }
 
 describe("tickets chat agent", () => {
-  const original = process.env[ENV_KEY];
+  const originalGemini = process.env[GEMINI_KEY];
+  const originalFireworks = process.env[FIREWORKS_KEY];
 
   afterEach(() => {
-    if (original === undefined) {
-      delete process.env[ENV_KEY];
-    } else {
-      process.env[ENV_KEY] = original;
-    }
+    restore(GEMINI_KEY, originalGemini);
+    restore(FIREWORKS_KEY, originalFireworks);
   });
 
   it("returns the ticket repository, proposals, threads, and the tickets chat agent", () => {
-    process.env[ENV_KEY] = "test-key";
+    process.env[GEMINI_KEY] = "test-key";
+    process.env[FIREWORKS_KEY] = "test-key";
     const { database } = createDatabase();
     expect(() => database.prepare("SELECT id FROM tickets").all()).toThrow();
 
@@ -649,13 +650,22 @@ describe("tickets chat agent", () => {
 
   it("rejects a reply whose tenant does not match the thread before calling the model", async () => {
     const { agent, resolveModel } = createAgent();
-    const first = await agent.reply({
-      tenantId: "tenant-a",
-      threadId: "thread-bound",
-      messages: [userMessage("hello")],
-    });
+    const modelIds: string[] = [];
+    const first = await agent.reply(
+      {
+        tenantId: "tenant-a",
+        threadId: "thread-bound",
+        messages: [userMessage("hello")],
+      },
+      {
+        onModelCall({ modelId }) {
+          modelIds.push(modelId);
+        },
+      },
+    );
     expect(first.outcome).toBe("response");
     if (first.outcome === "response") await first.response.text();
+    expect(modelIds).toEqual([ticketsChatModelId]);
 
     const mismatch = await agent.reply({
       tenantId: "tenant-b",
@@ -664,7 +674,7 @@ describe("tickets chat agent", () => {
     });
     expect(mismatch).toEqual({ outcome: "mismatch" });
     expect(resolveModel).toHaveBeenCalledTimes(1);
-    expect(resolveModel).toHaveBeenCalledWith("gemini-3.5-flash-lite");
+    expect(resolveModel).toHaveBeenCalledWith(ticketsChatModelId);
   });
 
   it("tells the model to leave ticket fields to the client", async () => {
@@ -738,6 +748,14 @@ describe("tickets chat agent", () => {
     expect(resolveModel).toHaveBeenCalledTimes(1);
   });
 });
+
+function restore(key: string, original: string | undefined) {
+  if (original === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = original;
+  }
+}
 
 function toolNames(model: MockLanguageModelV4): string[] {
   return model.doStreamCalls.flatMap((call) =>

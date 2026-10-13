@@ -11,12 +11,12 @@
     "dev": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["GEMINI_TEST_API_KEY"]
+      "passThroughEnv": ["GEMINI_TEST_API_KEY", "FIREWORKS_TEST_API_KEY"]
     },
     "start": {
       "cache": false,
       "persistent": true,
-      "passThroughEnv": ["GEMINI_TEST_API_KEY"]
+      "passThroughEnv": ["GEMINI_TEST_API_KEY", "FIREWORKS_TEST_API_KEY"]
     },
     "lint": {
       "dependsOn": ["transit"],
@@ -29,7 +29,7 @@
     "test": {
       "dependsOn": ["transit"],
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.shared.ts"],
-      "passThroughEnv": ["GEMINI_TEST_API_KEY"]
+      "passThroughEnv": ["GEMINI_TEST_API_KEY", "FIREWORKS_TEST_API_KEY"]
     },
     "test:watch": {
       "cache": false,

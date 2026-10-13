@@ -29,6 +29,9 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
   if (!process.env.GEMINI_TEST_API_KEY?.trim()) {
     throw new Error("GEMINI_TEST_API_KEY is missing");
   }
+  if (!process.env.FIREWORKS_TEST_API_KEY?.trim()) {
+    throw new Error("FIREWORKS_TEST_API_KEY is missing");
+  }
 
   const { database } = createDatabase();
   const { tickets, ticketsChatAgent } = createServices(database);
@@ -66,9 +69,12 @@ it("does not hand Tenant B's layoff plan to the tickets chat agent", async () =>
   await reply.response.text();
 
   expect(modelIds.length).toBeGreaterThan(0);
-  expect(modelIds.every((modelId) => modelId === "gemini-3.5-flash-lite")).toBe(
-    true,
-  );
+  expect(
+    modelIds.every(
+      (modelId) =>
+        modelId === "accounts/fireworks/models/deepseek-v4p1-flash",
+    ),
+  ).toBe(true);
 
   const handedToAgent = `${handed.join("\n")}\n${JSON.stringify(toolResults)}`;
   expect(toolResults.length).toBeGreaterThan(0);
