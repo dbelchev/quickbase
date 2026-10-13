@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type ChatTransport, type UIMessage } from "ai";
 import { cn } from "cn";
-import { ChevronDownIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -308,6 +308,7 @@ function ChatSession({
             editing={editing !== null}
             locked={fieldLocked}
             pending={proposal !== null}
+            replying={replying}
             onDraftChange={setDraft}
             onSubmit={(text) =>
               void submitMessage({ text, clearDraft: true })
@@ -334,6 +335,7 @@ function ThreadComposer({
   editing,
   locked,
   pending,
+  replying,
   onDraftChange,
   onSubmit,
 }: {
@@ -341,6 +343,7 @@ function ThreadComposer({
   editing: boolean;
   locked: boolean;
   pending: boolean;
+  replying: boolean;
   onDraftChange: (draft: string) => void;
   onSubmit: (text: string) => void;
 }) {
@@ -367,7 +370,7 @@ function ThreadComposer({
         onSubmit(draft);
       }}
     >
-      <InputGroup>
+      <InputGroup className={replying ? "has-disabled:opacity-100" : undefined}>
         <InputGroupTextarea
           aria-label="Message"
           disabled={locked}
@@ -386,13 +389,19 @@ function ThreadComposer({
         />
         <InputGroupAddon align="block-end" className="justify-end">
           <InputGroupButton
+            aria-busy={replying || undefined}
             aria-label="Send"
+            className="size-8 rounded-full border-white bg-zinc-900 p-0 text-white hover:bg-zinc-800 disabled:opacity-100"
             disabled={locked || draft.trim() === ""}
-            size="sm"
+            size="icon-sm"
             type="submit"
             variant="default"
           >
-            Send
+            {replying ? (
+              <Spinner aria-hidden className="text-white" />
+            ) : (
+              <ArrowUpIcon />
+            )}
           </InputGroupButton>
         </InputGroupAddon>
       </InputGroup>

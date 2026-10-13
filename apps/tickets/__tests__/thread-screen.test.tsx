@@ -555,7 +555,11 @@ it("sends on Enter and keeps the empty thread explanation", async () => {
     ),
   ).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Tickets" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  const sendButton = screen.getByRole("button", { name: "Send" });
+  expect(sendButton).toBeDisabled();
+  expect(sendButton).not.toHaveAttribute("aria-busy");
+  expect(sendButton.querySelector("[data-slot=spinner]")).not.toBeInTheDocument();
+  expect(sendButton.querySelector("svg")).toBeInTheDocument();
 
   await userEvent.type(
     screen.getByRole("textbox", { name: "Message" }),
@@ -574,11 +578,17 @@ it("disables Send while a reply is streaming", async () => {
   await send("Say something");
 
   expect(await screen.findByText("Still writing")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  const sendButton = screen.getByRole("button", { name: "Send" });
+  expect(sendButton).toBeDisabled();
+  expect(sendButton).toHaveAttribute("aria-busy", "true");
+  expect(sendButton.querySelector("[data-slot=spinner]")).toBeInTheDocument();
   held.release();
   expect(
     await screen.findByRole("article", { name: "Tickets chat agent" }),
   ).toHaveTextContent("Still writing");
+  expect(screen.getByRole("button", { name: "Send" })).not.toHaveAttribute(
+    "aria-busy",
+  );
 });
 
 it("asks for a decision before another message and opens the approval modal", async () => {
@@ -653,7 +663,11 @@ it("disables Send while a decision is in flight", async () => {
     await screen.findByRole("button", { name: "Approve" }),
   );
 
-  expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  const sendButton = screen.getByRole("button", { name: "Send" });
+  expect(sendButton).toBeDisabled();
+  expect(sendButton).not.toHaveAttribute("aria-busy");
+  expect(sendButton.querySelector("[data-slot=spinner]")).not.toBeInTheDocument();
+  expect(sendButton.querySelector("svg")).toBeInTheDocument();
   finish(Response.json({ outcome: "applied" }));
 });
 
