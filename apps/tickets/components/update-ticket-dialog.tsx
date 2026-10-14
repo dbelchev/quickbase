@@ -32,12 +32,16 @@ export function updateRequest(
 
 export function UpdateTicketDialog({
   ticket,
+  tenantId,
   onCancel,
   onSubmit,
+  active,
 }: {
   ticket: UpdateTicket;
+  tenantId: "tenant-a" | "tenant-b";
   onCancel: () => void;
   onSubmit: (text: string) => void;
+  active: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -45,15 +49,19 @@ export function UpdateTicketDialog({
   const [description, setDescription] = useState(ticket.description);
   const [status, setStatus] = useState(ticket.status);
   const request = updateRequest(ticket, { title, description, status });
+  const titleId = `update-ticket-title-${tenantId}`;
+  const titleFieldId = `update-title-${tenantId}`;
+  const descriptionFieldId = `update-description-${tenantId}`;
 
   useEffect(() => {
+    if (!active) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const firstField = dialogRef.current?.querySelector("input, textarea, button");
     if (firstField instanceof HTMLElement) firstField.focus();
     return () => {
       previouslyFocused.current?.focus();
     };
-  }, []);
+  }, [active]);
 
   function onKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
@@ -89,11 +97,11 @@ export function UpdateTicketDialog({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="update-ticket-title"
+        aria-labelledby={titleId}
         onKeyDown={onKeyDown}
         className="relative z-10 w-full max-w-lg rounded-lg border border-zinc-200 bg-white p-5 text-zinc-950 shadow-lg dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
       >
-        <h2 id="update-ticket-title" className="text-lg font-semibold">
+        <h2 id={titleId} className="text-lg font-semibold">
           Update ticket {ticket.id}
         </h2>
         <form
@@ -104,22 +112,22 @@ export function UpdateTicketDialog({
           }}
         >
           <div className="block text-sm">
-            <label className="text-zinc-500" htmlFor="update-title">
+            <label className="text-zinc-500" htmlFor={titleFieldId}>
               Title
             </label>
             <Input
-              id="update-title"
+              id={titleFieldId}
               className="mt-1"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
           </div>
           <div className="block text-sm">
-            <label className="text-zinc-500" htmlFor="update-description">
+            <label className="text-zinc-500" htmlFor={descriptionFieldId}>
               Description
             </label>
             <Textarea
-              id="update-description"
+              id={descriptionFieldId}
               className="mt-1"
               value={description}
               onChange={(event) => setDescription(event.target.value)}

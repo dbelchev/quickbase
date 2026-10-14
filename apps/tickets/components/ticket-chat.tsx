@@ -55,6 +55,13 @@ const tenants: { id: TenantId; label: string }[] = [
   { id: "tenant-b", label: "Tenant B" },
 ];
 
+function newThreadIds(): Record<TenantId, string> {
+  return {
+    "tenant-a": crypto.randomUUID(),
+    "tenant-b": crypto.randomUUID(),
+  };
+}
+
 const pendingConfirmations = new Map<string, string>();
 
 export function TicketChat({
@@ -63,18 +70,25 @@ export function TicketChat({
   replyTransport?: ChatTransport<ChatMessage>;
 } = {}) {
   const [tenantId, setTenantId] = useState<TenantId>("tenant-a");
-  const [threadId, setThreadId] = useState(() => crypto.randomUUID());
-  const [sessionBusy, setSessionBusy] = useState(false);
+  const [threadIds, setThreadIds] = useState(newThreadIds);
+  const [busyTenants, setBusyTenants] = useState<ReadonlySet<TenantId>>(
+    () => new Set(),
+  );
   const [resetting, setResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
-  const reportSessionBusy = useCallback((busy: boolean) => {
-    setSessionBusy(busy);
+  const reportSessionBusy = useCallback((tenant: TenantId, busy: boolean) => {
+    setBusyTenants((current) => {
+      if (current.has(tenant) === busy) return current;
+      const next = new Set(current);
+      if (busy) next.add(tenant);
+      else next.delete(tenant);
+      return next;
+    });
   }, []);
 
   function selectTenant(next: TenantId) {
-    if (next === tenantId) return;
+    if (next === tenantId || resetting) return;
     setTenantId(next);
-    setThreadId(crypto.randomUUID());
     setResetError(null);
   }
 
@@ -87,7 +101,7 @@ export function TicketChat({
         setResetError("Storage was not reset.");
         return;
       }
-      setThreadId(crypto.randomUUID());
+      setThreadIds(newThreadIds());
     } catch {
       setResetError("Storage was not reset.");
     } finally {
@@ -104,7 +118,7 @@ export function TicketChat({
             <button
               type="button"
               onClick={() => void resetStorage()}
-              disabled={sessionBusy || resetting}
+              disabled={busyTenants.size > 0 || resetting}
               className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700"
             >
               Reset
@@ -118,6 +132,7 @@ export function TicketChat({
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  disabled={resetting}
                   onClick={() => selectTenant(tenant.id)}
                   className={`rounded-md px-3 py-1.5 text-sm ${
                     selected
@@ -133,14 +148,30 @@ export function TicketChat({
           </div>
         </div>
       </header>
-      <ChatSession
-        key={threadId}
-        onBusyChange={reportSessionBusy}
-        replyTransport={replyTransport}
-        resetError={resetError}
-        tenantId={tenantId}
-        threadId={threadId}
-      />
+      <div className="relative min-h-0 flex-1">
+        {tenants.map((tenant) => {
+          const active = tenant.id === tenantId;
+          return (
+            <div
+              key={tenant.id}
+              className="absolute inset-0 flex min-h-0 flex-col"
+              aria-hidden={active ? undefined : true}
+              inert={active ? undefined : true}
+              style={active ? undefined : { visibility: "hidden" }}
+            >
+              <ChatSession
+                key={threadIds[tenant.id]}
+                active={active}
+                onBusyChange={reportSessionBusy}
+                replyTransport={replyTransport}
+                resetError={active ? resetError : null}
+                tenantId={tenant.id}
+                threadId={threadIds[tenant.id]}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -150,13 +181,15 @@ function ChatSession({
   threadId,
   replyTransport,
   resetError,
+  active,
   onBusyChange,
 }: {
   tenantId: TenantId;
   threadId: string;
   replyTransport?: ChatTransport<ChatMessage>;
   resetError: string | null;
-  onBusyChange: (busy: boolean) => void;
+  active: boolean;
+  onBusyChange: (tenantId: TenantId, busy: boolean) => void;
 }) {
   const [decisions, setDecisions] = useState<
     Record<string, DecisionOutcome>
@@ -200,9 +233,9 @@ function ChatSession({
   const busy = replying || deciding;
 
   useEffect(() => {
-    onBusyChange(busy);
-    return () => onBusyChange(false);
-  }, [busy, onBusyChange]);
+    onBusyChange(tenantId, busy);
+    return () => onBusyChange(tenantId, false);
+  }, [busy, onBusyChange, tenantId]);
 
   async function decide(decision: Decision) {
     if (!proposal) return;
@@ -324,10 +357,12 @@ function ChatSession({
         </div>
       </div>
       {proposal ? (
-        <ApprovalModal proposal={proposal} onDecide={decide} />
+        <ApprovalModal active={active} proposal={proposal} onDecide={decide} />
       ) : null}
       {editing ? (
         <UpdateTicketDialog
+          active={active}
+          tenantId={tenantId}
           ticket={editing}
           onCancel={() => setEditing(null)}
           onSubmit={(text) => void submitMessage({ text })}

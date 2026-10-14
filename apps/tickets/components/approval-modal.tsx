@@ -24,21 +24,24 @@ const tenantLabels = {
 export function ApprovalModal({
   proposal,
   onDecide,
+  active,
 }: {
   proposal: PendingProposal;
   onDecide: (decision: "approve" | "reject") => void;
+  active: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    if (!active) return;
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const firstButton = dialogRef.current?.querySelector("button");
     firstButton?.focus();
     return () => {
       previouslyFocused.current?.focus();
     };
-  }, []);
+  }, [active]);
 
   function onKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
@@ -62,6 +65,7 @@ export function ApprovalModal({
     }
   }
 
+  const titleId = `approval-title-${proposal.tenantId}`;
   const fieldChanges = proposal.fields
     ? Object.entries(proposal.fields).filter(([, value]) => value !== undefined)
     : [];
@@ -78,11 +82,11 @@ export function ApprovalModal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="approval-title"
+        aria-labelledby={titleId}
         onKeyDown={onKeyDown}
         className="relative z-10 w-full max-w-lg rounded-lg border border-zinc-200 bg-white p-5 text-zinc-950 shadow-lg dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
       >
-        <h2 id="approval-title" className="text-lg font-semibold">
+        <h2 id={titleId} className="text-lg font-semibold">
           Approve this {proposal.action}?
         </h2>
         <dl className="mt-4 space-y-3 text-sm">

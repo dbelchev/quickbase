@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UIMessageChunk } from "ai";
 import { afterEach, expect, it, vi } from "vitest";
@@ -497,11 +497,12 @@ it("keeps the jump control inactive at the live edge", () => {
     />,
   );
 
-  const jump = screen.getByRole("button", {
+  const jumps = screen.getAllByRole("button", {
     name: "Scroll to end",
     hidden: true,
   });
-  expect(jump).toHaveAttribute("inert");
+  expect(jumps.length).toBeGreaterThan(0);
+  for (const jump of jumps) expect(jump).toHaveAttribute("inert");
 });
 
 it("names the person and the tickets chat agent without visible speaker labels", async () => {
@@ -549,11 +550,9 @@ it("sends on Enter and keeps the empty thread explanation", async () => {
     />,
   );
 
-  expect(
-    screen.getByText(
-      "Ask about this tenant's tickets. Deletes and updates wait for approval.",
-    ),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(
+    "Ask about this tenant's tickets. Deletes and updates wait for approval.",
+  );
   expect(screen.getByRole("heading", { name: "Tickets" })).toBeInTheDocument();
   const sendButton = screen.getByRole("button", { name: "Send" });
   expect(sendButton).toBeDisabled();
@@ -748,37 +747,465 @@ it("shows an alert when a reply, decision, or reset fails", async () => {
   expect(await screen.findByText("Storage was not reset.")).toBeInTheDocument();
 });
 
-it("opens a new thread when the tenant changes and when storage resets", async () => {
+const emptyThread =
+  "Ask about this tenant's tickets. Deletes and updates wait for approval.";
+
+it("keeps a hidden reply running and blocks reset until every tenant is idle", async () => {
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  render(
+    <TicketChat
+      replyTransport={chatTransport(async (text) => {
+        if (text === "Hold") {
+          return streamChunks(async (enqueue) => {
+            for (const chunk of assistantReply({ text: "From A" })) {
+              if (chunk.type === "text-end") await gate;
+              enqueue(chunk);
+            }
+          });
+        }
+        return streamChunks((enqueue) => {
+          for (const chunk of assistantReply({ text: "From B" })) enqueue(chunk);
+        });
+      })}
+    />,
+  );
+
+  await send("Hold");
+  expect(await screen.findByText("From A")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reset" })).toHaveAccessibleName(
+    "Reset",
+  );
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.getByRole("log")).not.toHaveTextContent("From A");
+  expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+  expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+
+  await send("Hello from B");
+  expect(await screen.findByText("From B")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.getByRole("log")).toHaveAttribute("aria-busy", "true");
+  expect(
+    screen.getByRole("article", { name: "Tickets chat agent" }),
+  ).toHaveTextContent("From A");
+  expect(screen.getByRole("log")).not.toHaveTextContent("From B");
+
+  release();
+  await waitFor(() => {
+    expect(screen.getByRole("log")).not.toHaveAttribute("aria-busy", "true");
+  });
+  expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+  expect(
+    screen.getByRole("article", { name: "Tickets chat agent" }),
+  ).toHaveTextContent("From A");
+});
+
+it("returns a tenant's update dialog and moves focus into it", async () => {
+  render(
+    <TicketChat replyTransport={replyTransport(() => searchReply())} />,
+  );
+
+  await send("List the tickets");
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Update ticket 1" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: "Update ticket 1" });
+  expect(dialog.contains(document.activeElement)).toBe(true);
+  await userEvent.type(screen.getByRole("textbox", { name: "Title" }), " jammed");
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  const returned = await screen.findByRole("dialog", {
+    name: "Update ticket 1",
+  });
+  expect(returned.contains(document.activeElement)).toBe(true);
+  expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue(
+    `${printer.title} jammed`,
+  );
+});
+
+it("returns focus to a tenant's open proposal", async () => {
+  render(
+    <TicketChat replyTransport={replyTransport(() => proposalReply())} />,
+  );
+
+  await send("Close the printer ticket");
+  const dialog = await screen.findByRole("dialog", {
+    name: "Approve this update?",
+  });
+  expect(dialog.contains(document.activeElement)).toBe(true);
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  const returned = await screen.findByRole("dialog", {
+    name: "Approve this update?",
+  });
+  expect(returned.contains(document.activeElement)).toBe(true);
+});
+
+it("keeps each tenant's thread when the tenant changes and clears both when storage resets", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => new Response(null, { status: 200 })),
   );
   render(
     <TicketChat
-      replyTransport={replyTransport(() =>
-        assistantReply({ text: "Tenant thread." }),
+      replyTransport={replyTransport((text) =>
+        assistantReply({
+          text: text === "Hello again" ? "Tenant B thread." : "Tenant A thread.",
+        }),
       )}
     />,
   );
 
   await send("Hello");
-  expect(await screen.findByText("Tenant thread.")).toBeInTheDocument();
+  expect(await screen.findByText("Tenant A thread.")).toBeInTheDocument();
 
   await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
-  expect(screen.queryByText("Tenant thread.")).not.toBeInTheDocument();
   expect(
-    screen.getByText(
-      "Ask about this tenant's tickets. Deletes and updates wait for approval.",
-    ),
-  ).toBeInTheDocument();
+    screen.queryByRole("article", { name: "Tickets chat agent" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
 
   await send("Hello again");
-  expect(await screen.findByText("Tenant thread.")).toBeInTheDocument();
-  await userEvent.click(screen.getByRole("button", { name: "Reset" }));
-  expect(screen.queryByText("Tenant thread.")).not.toBeInTheDocument();
+  expect(await screen.findByText("Tenant B thread.")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
   expect(
-    screen.getByText(
-      "Ask about this tenant's tickets. Deletes and updates wait for approval.",
+    screen.getByRole("article", { name: "Tickets chat agent" }),
+  ).toHaveTextContent("Tenant A thread.");
+  expect(
+    screen.getByRole("article", { name: "Tickets chat agent" }),
+  ).not.toHaveTextContent("Tenant B thread.");
+
+  await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+  expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Tenant A" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+  expect(screen.queryByText("Tenant A thread.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Tenant B thread.")).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+});
+
+it("keeps each tenant's unsent draft", async () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() => assistantReply({ text: "Noted." }))}
+    />,
+  );
+
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Message" }),
+    "Draft for A",
+  );
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Message" }),
+    "Draft for B",
+  );
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+    "Draft for A",
+  );
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+    "Draft for B",
+  );
+});
+
+it("leaves the thread unchanged when the selected tenant is chosen again", async () => {
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({ text: "Tenant A thread." }),
+      )}
+    />,
+  );
+
+  await send("Hello");
+  await userEvent.type(
+    screen.getByRole("textbox", { name: "Message" }),
+    "Keep this",
+  );
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+
+  expect(screen.getByText("Tenant A thread.")).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(
+    "Keep this",
+  );
+});
+
+it("keeps a recorded decision on that tenant's thread", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ outcome: "applied" }, { status: 200 })),
+  );
+  render(
+    <TicketChat
+      replyTransport={replyTransport((text) =>
+        text === "Confirm the recorded decision."
+          ? assistantReply({ text: "The change was applied." })
+          : proposalReply(),
+      )}
+    />,
+  );
+
+  await send("Close the printer ticket");
+  await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
+  expect(await screen.findByText("The change was applied.")).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("log")).not.toHaveTextContent(
+    "The change was applied.",
+  );
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.getByText("The change was applied.")).toBeVisible();
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+it("keeps a reply failure on the thread that failed", async () => {
+  render(
+    <TicketChat
+      replyTransport={chatTransport(async (text) => {
+        if (text === "Break") throw new Error("The reply failed.");
+        return streamChunks((enqueue) => {
+          for (const chunk of assistantReply({ text: "From B" })) enqueue(chunk);
+        });
+      })}
+    />,
+  );
+
+  await send("Break");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The reply failed.",
+  );
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+  await send("Hello from B");
+  expect(await screen.findByText("From B")).toBeVisible();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("The reply failed.");
+  expect(screen.getByRole("log")).not.toHaveTextContent("From B");
+});
+
+it("keeps a decision failure on the thread that failed", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 500 })),
+  );
+  render(
+    <TicketChat replyTransport={replyTransport(() => proposalReply())} />,
+  );
+
+  await send("Close the printer ticket");
+  await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "The decision was not recorded.",
+  );
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "The decision was not recorded.",
+  );
+});
+
+it("blocks reset while a hidden tenant is recording a decision", async () => {
+  let finish: (response: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
     ),
+  );
+  render(
+    <TicketChat replyTransport={replyTransport(() => proposalReply())} />,
+  );
+
+  await send("Close the printer ticket");
+  await userEvent.click(await screen.findByRole("button", { name: "Approve" }));
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+
+  expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Reset" })).toHaveAccessibleName(
+    "Reset",
+  );
+  expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+
+  finish(Response.json({ outcome: "applied" }));
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+  });
+});
+
+it("allows reset while a proposal is open and stays on the current tenant", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 200 })),
+  );
+  render(
+    <TicketChat replyTransport={replyTransport(() => proposalReply())} />,
+  );
+
+  await send("Close the printer ticket");
+  expect(
+    await screen.findByRole("dialog", { name: "Approve this update?" }),
   ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.getByRole("button", { name: "Reset" })).toBeEnabled();
+  await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+  expect(screen.getByRole("radio", { name: "Tenant B" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(screen.queryByRole("article")).not.toBeInTheDocument();
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+});
+
+it("disables the tenant control while reset is in flight", async () => {
+  let finish: (response: Response) => void = () => {};
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  );
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({ text: "Tenant A thread." }),
+      )}
+    />,
+  );
+
+  await send("Hello");
+  await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+  expect(screen.getByRole("radio", { name: "Tenant A" })).toBeDisabled();
+  expect(screen.getByRole("radio", { name: "Tenant B" })).toBeDisabled();
+  expect(screen.getByText("Tenant A thread.")).toBeVisible();
+
+  finish(new Response(null, { status: 200 }));
+  await waitFor(() => {
+    expect(screen.getByRole("radio", { name: "Tenant B" })).toBeEnabled();
+  });
+  expect(screen.queryByText("Tenant A thread.")).not.toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Tenant A" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+});
+
+it("leaves both threads in place when reset fails", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 500 })),
+  );
+  render(
+    <TicketChat
+      replyTransport={replyTransport((text) =>
+        assistantReply({
+          text: text === "Hello again" ? "Tenant B thread." : "Tenant A thread.",
+        }),
+      )}
+    />,
+  );
+
+  await send("Hello");
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  await send("Hello again");
+  await userEvent.click(screen.getByRole("button", { name: "Reset" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Storage was not reset.",
+  );
+  expect(screen.getByText("Tenant B thread.")).toBeVisible();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant A" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByText("Tenant A thread.")).toBeVisible();
+
+  await userEvent.click(screen.getByRole("radio", { name: "Tenant B" }));
+  expect(screen.getByText("Tenant B thread.")).toBeVisible();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("opens a fresh page on tenant A without loading an earlier thread", async () => {
+  const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+  const view = render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({ text: "Tenant A thread." }),
+      )}
+    />,
+  );
+
+  expect(screen.getByRole("radio", { name: "Tenant A" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  await send("Hello");
+  expect(await screen.findByText("Tenant A thread.")).toBeVisible();
+
+  view.unmount();
+  render(
+    <TicketChat
+      replyTransport={replyTransport(() =>
+        assistantReply({ text: "Tenant A thread." }),
+      )}
+    />,
+  );
+
+  expect(screen.getByRole("radio", { name: "Tenant A" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  expect(screen.getByRole("paragraph")).toHaveTextContent(emptyThread);
+  expect(screen.queryByText("Tenant A thread.")).not.toBeInTheDocument();
+  expect(fetchMock).not.toHaveBeenCalled();
 });
