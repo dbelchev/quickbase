@@ -1,3 +1,7 @@
+export {
+  ticketsAgentBaseSystemPrompt,
+  ticketsAgentDecisionSystemPrompt,
+} from "./prompt/TicketsAgent";
 export { type ThreadRecord } from "./Thread";
 export {
   type DecideResult,
@@ -8,7 +12,9 @@ export {
   type ProposeResult,
 } from "./Proposal";
 export {
+  type CompletedTurn,
   type IncomingMessage,
+  type ObservedCall,
   type ReplyInput,
   type ReplyObservers,
   type ReplyResult,

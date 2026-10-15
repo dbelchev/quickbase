@@ -12,6 +12,7 @@ catalog:
   zod: ^4.6.5
 
 allowBuilds:
+  "@ax-llm/ax": false
   esbuild: true
   sharp: true
   unrs-resolver: true

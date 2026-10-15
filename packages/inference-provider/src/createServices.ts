@@ -27,6 +27,15 @@ export function createServices() {
   };
 }
 
+export function createFireworksService() {
+  const provider = createFireworksProvider();
+  return new FireworksService(
+    resolveLanguageModel((modelId: FireworksModelId) =>
+      provider.languageModel(modelId),
+    ),
+  );
+}
+
 function resolveLanguageModel<ModelId extends string>(
   languageModel: (modelId: ModelId) => LanguageModel,
 ) {

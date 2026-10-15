@@ -7,9 +7,21 @@ export type ReplyInput = {
   confirmationProposalId?: string;
 };
 
+export type ObservedCall = {
+  toolName: string;
+  input: unknown;
+  invalid?: boolean;
+};
+
+export type CompletedTurn = {
+  replyText: string;
+  toolCalls: ObservedCall[];
+};
+
 export type ReplyObservers = {
   onModelCall?: (call: { modelId: string; messages: unknown }) => void;
   onToolResults?: (results: unknown[]) => void;
+  onTurn?: (turn: CompletedTurn) => void;
 };
 
 export type ReplyResult =

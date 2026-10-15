@@ -1,4 +1,10 @@
 export { createServices } from "./createServices";
 export { TicketRepository } from "./repository";
-export { ProposalService, ThreadService, TicketsAgentService } from "./service";
+export {
+  ProposalService,
+  ThreadService,
+  TicketsAgentPromptOptimiser,
+  TicketsAgentScorer,
+  TicketsAgentService,
+} from "./service";
 export type * from "./model";

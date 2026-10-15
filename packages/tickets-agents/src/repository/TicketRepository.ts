@@ -26,11 +26,19 @@ export class TicketRepository {
   search(tenantId: TenantId, query: string): Ticket[] {
     const owner = tenantIdSchema.parse(tenantId);
     const needle = query.trim();
-    const rows =
-      needle === "" || needle === "*"
-        ? all(this.database, listTickets(owner))
-        : all(this.database, searchTickets(owner, likePattern(needle)));
-    return rows.map((row) => ticketSchema.parse(row));
+    const tickets = all(this.database, listTickets(owner)).map((row) =>
+      ticketSchema.parse(row),
+    );
+    if (needle === "" || needle === "*") return tickets;
+    const queryWords = words(needle);
+    const needsPercent = needle.includes("%");
+    const needsUnderscore = needle.includes("_");
+    if (queryWords.length === 0 && !needsPercent && !needsUnderscore) {
+      return [];
+    }
+    return tickets.filter((ticket) =>
+      matchesQuery(ticket, queryWords, needsPercent, needsUnderscore),
+    );
   }
 
   find(tenantId: TenantId, id: string): Ticket | null {
@@ -78,12 +86,22 @@ function listTickets(owner: TenantId) {
     .orderByRaw("rowid");
 }
 
-function searchTickets(owner: TenantId, pattern: string) {
-  return listTickets(owner).where((builder) => {
-    builder
-      .whereRaw("title LIKE ? ESCAPE '\\'", [pattern])
-      .orWhereRaw("description LIKE ? ESCAPE '\\'", [pattern]);
-  });
+function words(text: string): string[] {
+  return text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+}
+
+function matchesQuery(
+  ticket: Ticket,
+  queryWords: string[],
+  needsPercent: boolean,
+  needsUnderscore: boolean,
+): boolean {
+  const text = `${ticket.title}\n${ticket.description}`;
+  const haystack = new Set(words(text));
+  if (queryWords.some((word) => !haystack.has(word))) return false;
+  if (needsPercent && !text.includes("%")) return false;
+  if (needsUnderscore && !text.includes("_")) return false;
+  return true;
 }
 
 function definedFields(fields: UpdateFields): Record<string, string> {
@@ -96,10 +114,3 @@ function definedFields(fields: UpdateFields): Record<string, string> {
   return assignments;
 }
 
-function likePattern(query: string): string {
-  const escaped = query
-    .replaceAll("\\", "\\\\")
-    .replaceAll("%", "\\%")
-    .replaceAll("_", "\\_");
-  return `%${escaped}%`;
-}

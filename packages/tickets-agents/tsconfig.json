@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["src", "__tests__"],
+  "include": ["src", "scripts", "__tests__"],
   "exclude": ["node_modules"]
 }
